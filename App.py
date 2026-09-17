@@ -428,7 +428,7 @@ with tab_kpi:
 )
 st.dataframe(styled, use_container_width=True, hide_index=True, height=500)
 
-        top3 = df_r.iloc[:-1].head(3)
+            top3 = df_r.iloc[:-1].head(3)
         bottom3 = df_r.iloc[:-1].tail(3)
         top3_text = ", ".join([f"{r['Tên NVBH']} ({r['MTD']})" for _, r in top3.iterrows()])
         bottom3_text = ", ".join([f"{r['Tên NVBH']} ({r['MTD']})" for _, r in bottom3.iterrows()])
