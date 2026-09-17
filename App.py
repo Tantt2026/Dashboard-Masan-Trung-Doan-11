@@ -62,14 +62,14 @@ st.markdown("""
     }
     .main-header h1 {
         margin: 0;
-        font-size: 42px;          /* ← tăng gấp đôi */
+        font-size: 42px;          /* ← tăng gấp ba */
         font-weight: 800;
         letter-spacing: 0.8px;
         line-height: 1.15;
     }
     .main-header h2 {
         margin: 6px 0 0 0;
-        font-size: 20px;          /* ← tăng gấp đôi */
+        font-size: 20px;          /* ← tăng gấp ba */
         font-weight: 600;
         color: #fefcbf;
         letter-spacing: 0.4px;
