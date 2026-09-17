@@ -5,7 +5,7 @@ from datetime import date
 import os
 
 st.set_page_config(
-    page_title="TRACKING KPI ĐDKD - SS Trương Thanh Tân",
+    page_title="TRACKING KPI ĐDKD - SS Nguyễn Thị Tường Vy",
     page_icon="📊",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -390,7 +390,7 @@ st.markdown(f"""
     <div class="logo">{logo_svg}</div>
     <div class="title-block">
         <h1>SƯ ĐOÀN HCM4 - TRUNG ĐOÀN 10</h1>
-        <h2>TRACKING KPI ĐDKD - TEAM SS TRƯƠNG THANH TÂN</h2>
+        <h2>TRACKING KPI ĐDKD - TEAM SS Nguyễn Thị Tường Vy</h2>
     </div>
 </div>
 """, unsafe_allow_html=True)
