@@ -411,10 +411,10 @@ with tab_kpi:
 
         # Style: header xanh + total xanh (trừ %MTD) + % màu
         styled = (
-    df_r.style
-    .map(color_pct, subset=['% MTD'])
-    .apply(style_total_row, axis=1)
-    .set_table_styles([
+        df_r.style
+        .map(color_pct, subset=['% MTD'])
+        .apply(style_total_row, axis=1)
+        .set_table_styles([
         {
             'selector': 'th',
             'props': [
