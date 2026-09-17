@@ -21,7 +21,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ====================== ĐƯỜNG DẪN FILE CỐ ĐỊNH ======================
-DATA_DIR = "data"   # thư mục chứa file trên GitHub
+DATA_DIR = "data"
 
 RPT_PATH = os.path.join(DATA_DIR, "RPT_061.xlsx")
 MCP_PATH = os.path.join(DATA_DIR, "Data_MCP.xlsx")
@@ -30,7 +30,6 @@ KPI_PATH = os.path.join(DATA_DIR, "Target_KPI.xlsx")
 # ====================== HÀM XỬ LÝ DỮ LIỆU ======================
 @st.cache_data(ttl=3600)
 def load_and_process():
-    """Đọc data cố định từ GitHub (thư mục data/)"""
     if not os.path.exists(RPT_PATH):
         st.error(f"Không tìm thấy file: {RPT_PATH}")
         st.stop()
@@ -41,14 +40,12 @@ def load_and_process():
     df = pd.read_excel(RPT_PATH)
     mcp = pd.read_excel(MCP_PATH)
 
-    # Lọc đơn đã hủy
     df = df[df['Tình trạng đơn hàng'] != 'Đã hủy'].copy()
     df['Ngày tạo đơn hàng'] = pd.to_datetime(
         df['Ngày tạo đơn hàng'], format='%d/%m/%Y %H:%M:%S', errors='coerce'
     )
     df['date'] = df['Ngày tạo đơn hàng'].dt.date
 
-    # Map kênh từ MCP
     mcp_map = mcp[['Outlet_code', 'L1']].drop_duplicates(subset=['Outlet_code'])
     mcp_map['Outlet_code'] = mcp_map['Outlet_code'].astype(str)
     df['Mã CH'] = df['Mã CH'].astype(str)
@@ -196,6 +193,24 @@ def build_report(df, report_date, targets, report_type):
 
     df_out = pd.DataFrame(results).sort_values('MTD', ascending=False).reset_index(drop=True)
     df_out.insert(0, 'STT', range(1, len(df_out) + 1))
+
+    # ========== THÊM DÒNG TỔNG CỘNG ==========
+    total_chi_tieu = int(df_out['Chỉ tiêu'].sum())
+    total_ngay = int(df_out['Thực hiện (Ngày)'].sum())
+    total_mtd = int(df_out['MTD'].sum())
+    total_pct = round(total_mtd / team_tgt * 100, 1) if team_tgt else 0
+
+    total_row = pd.DataFrame([{
+        'STT': '-',
+        'Mã NVBH': 'TỔNG CỘNG',
+        'Tên NVBH': 'SS Trương Thanh Tân Total',
+        'Chỉ tiêu': team_tgt,          # dùng target team (không cộng per SM)
+        'Thực hiện (Ngày)': total_ngay,
+        'MTD': total_mtd,
+        '% MTD': f"{total_pct}%"
+    }])
+
+    df_out = pd.concat([df_out, total_row], ignore_index=True)
     return df_out, team_tgt
 
 
@@ -239,6 +254,18 @@ def build_combo(df, report_date):
 
     df_out = pd.DataFrame(rows).sort_values('MTD (OFF)', ascending=False).reset_index(drop=True)
     df_out.insert(0, 'STT', range(1, len(df_out) + 1))
+
+    # ========== THÊM DÒNG TỔNG CỘNG COMBO ==========
+    total_row = pd.DataFrame([{
+        'STT': '-',
+        'Mã NVBH': 'TỔNG CỘNG',
+        'Tên NVBH': 'SS Trương Thanh Tân Total',
+        'Phát sinh Ngày (OFF)': int(df_out['Phát sinh Ngày (OFF)'].sum()),
+        'MTD (OFF)': int(df_out['MTD (OFF)'].sum()),
+        'Phát sinh Ngày (ON)': int(df_out['Phát sinh Ngày (ON)'].sum()),
+        'MTD (ON)': int(df_out['MTD (ON)'].sum()),
+    }])
+    df_out = pd.concat([df_out, total_row], ignore_index=True)
     return df_out
 
 
@@ -255,7 +282,6 @@ with st.sidebar:
         st.cache_data.clear()
         st.rerun()
 
-# Load data cố định
 with st.spinner("Đang load data từ GitHub..."):
     df, mcp = load_and_process()
     targets = get_targets()
@@ -270,7 +296,6 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "📈 Tổng quan"
 ])
 
-# ----- Các báo cáo 1 → 5 -----
 report_list = [
     ('ASO_ALL', 'ASO ALL Kênh OFF', tab1),
     ('PC_BT', 'PC BT ≥ 4 Line', tab2),
@@ -282,14 +307,17 @@ report_list = [
 for rtype, title, tab in report_list:
     with tab:
         df_r, team_tgt = build_report(df, report_date, targets, rtype)
-        total_mtd = int(df_r['MTD'].sum())
-        total_ngay = int(df_r['Thực hiện (Ngày)'].sum())
-        pct_team = round(total_mtd / team_tgt * 100, 1) if team_tgt else 0
+
+        # Lấy dòng total (dòng cuối)
+        total_row = df_r.iloc[-1]
+        total_mtd = int(total_row['MTD'])
+        total_ngay = int(total_row['Thực hiện (Ngày)'])
+        pct_team = total_row['% MTD']
 
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("Target Team", f"{team_tgt:,}")
         c2.metric("MTD", f"{total_mtd:,}")
-        c3.metric("% MTD", f"{pct_team}%")
+        c3.metric("% MTD", pct_team)
         c4.metric("Phát sinh Ngày", f"+{total_ngay}")
 
         st.dataframe(
@@ -298,7 +326,8 @@ for rtype, title, tab in report_list:
             hide_index=True
         )
 
-        top3 = df_r.head(3)
+        # Top 3 (bỏ dòng total)
+        top3 = df_r.iloc[:-1].head(3)
         top3_text = ", ".join(
             [f"{row['Tên NVBH']} ({row['MTD']})" for _, row in top3.iterrows()]
         )
@@ -307,10 +336,12 @@ for rtype, title, tab in report_list:
 # ----- Tab Combo -----
 with tab6:
     df_combo = build_combo(df, report_date)
-    total_off = int(df_combo['MTD (OFF)'].sum())
-    total_on = int(df_combo['MTD (ON)'].sum())
-    ngay_off = int(df_combo['Phát sinh Ngày (OFF)'].sum())
-    ngay_on = int(df_combo['Phát sinh Ngày (ON)'].sum())
+
+    total_row = df_combo.iloc[-1]
+    total_off = int(total_row['MTD (OFF)'])
+    total_on = int(total_row['MTD (ON)'])
+    ngay_off = int(total_row['Phát sinh Ngày (OFF)'])
+    ngay_on = int(total_row['Phát sinh Ngày (ON)'])
 
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("MTD OFF", f"{total_off} / 1092", f"{round(total_off/1092*100,1)}%")
@@ -326,12 +357,12 @@ with tab7:
     summary_rows = []
     for rtype, title, _ in report_list:
         df_r, team_tgt = build_report(df, report_date, targets, rtype)
-        pct = round(df_r['MTD'].sum() / team_tgt * 100, 1) if team_tgt else 0
+        total_row = df_r.iloc[-1]
         summary_rows.append({
             'Báo cáo': title,
             'Target': team_tgt,
-            'MTD': int(df_r['MTD'].sum()),
-            '% MTD': f"{pct}%"
+            'MTD': int(total_row['MTD']),
+            '% MTD': total_row['% MTD']
         })
     summary_rows.append({
         'Báo cáo': 'Combo OFF',
