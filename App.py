@@ -85,14 +85,7 @@ def load_main_data():
 
 @st.cache_data(ttl=600)
 def load_cat_data():
-    """Load Data_Cat.xlsx – thử nhiều tên file phổ biến"""
-    possible_names = [
-        "Data_Cat.xlsx",
-        "data_cat.xlsx",
-        "Data_CAT.xlsx",
-        "CAT.xlsx",
-        "Mbs_Cat.xlsx"
-    ]
+    possible_names = ["Data_Cat.xlsx", "data_cat.xlsx", "Data_CAT.xlsx", "CAT.xlsx"]
     for name in possible_names:
         path = os.path.join(DATA_DIR, name)
         if os.path.exists(path):
@@ -106,14 +99,7 @@ def load_cat_data():
 
 @st.cache_data(ttl=600)
 def load_brand_data():
-    """Load Data_Brand.xlsx – thử nhiều tên file phổ biến"""
-    possible_names = [
-        "Data_Brand.xlsx",
-        "data_brand.xlsx",
-        "Data_BRAND.xlsx",
-        "Brand.xlsx",
-        "Mbs_Brand.xlsx"
-    ]
+    possible_names = ["Data_Brand.xlsx", "data_brand.xlsx", "Data_BRAND.xlsx", "Brand.xlsx"]
     for name in possible_names:
         path = os.path.join(DATA_DIR, name)
         if os.path.exists(path):
@@ -171,11 +157,20 @@ def color_pct(val):
         return ''
 
 
+def format_number_vn(x):
+    """Format số theo kiểu Việt Nam: 1.000.000"""
+    try:
+        if pd.isnull(x):
+            return ""
+        return f"{float(x):,.0f}".replace(",", ".")
+    except:
+        return x
+
+
 # ====================== LOGIC KPI ======================
 def build_report(df, report_date, targets, report_type, filter_nv=None):
     df_mtd = df[df['date'] >= date(report_date.year, report_date.month, 1)].copy()
 
-    # Lọc theo Nhân viên nếu có
     if filter_nv and filter_nv != "Tất cả ĐDKD":
         df_mtd = df_mtd[df_mtd['Tên NVBH'] == filter_nv]
 
@@ -463,10 +458,18 @@ with tab_cat:
     st.subheader("📦 TRACKING MBS - CAT")
     if not df_cat.empty:
         st.success(f"✅ Đã load được Data_Cat.xlsx – {len(df_cat):,} dòng")
-        st.dataframe(df_cat, use_container_width=True, height=600)
+
+        df_show = df_cat.copy()
+        for col in df_show.columns:
+            col_lower = col.lower().replace(" ", "")
+            if "doanh số" in col.lower() or "doanhso" in col_lower:
+                df_show[col] = pd.to_numeric(df_show[col], errors='coerce')
+                df_show[col] = df_show[col].apply(format_number_vn)
+
+        st.dataframe(df_show, use_container_width=True, height=600)
     else:
         st.error("❌ Không tìm thấy file Data_Cat.xlsx trong thư mục data/")
-        st.info("Hãy kiểm tra tên file chính xác là **Data_Cat.xlsx** (phân biệt chữ hoa/thường) và đã push lên GitHub.")
+        st.info("Hãy kiểm tra tên file chính xác là **Data_Cat.xlsx** và đã push lên GitHub.")
         st.code(f"Đường dẫn đang tìm: {CAT_PATH}")
 
 # ----- TAB BRAND -----
@@ -474,7 +477,15 @@ with tab_brand:
     st.subheader("🏷️ TRACKING MBS - BRAND")
     if not df_brand.empty:
         st.success(f"✅ Đã load được Data_Brand.xlsx – {len(df_brand):,} dòng")
-        st.dataframe(df_brand, use_container_width=True, height=600)
+
+        df_show = df_brand.copy()
+        for col in df_show.columns:
+            col_lower = col.lower().replace(" ", "")
+            if "doanh số" in col.lower() or "doanhso" in col_lower:
+                df_show[col] = pd.to_numeric(df_show[col], errors='coerce')
+                df_show[col] = df_show[col].apply(format_number_vn)
+
+        st.dataframe(df_show, use_container_width=True, height=600)
     else:
         st.error("❌ Không tìm thấy file Data_Brand.xlsx trong thư mục data/")
         st.info("Hãy kiểm tra tên file chính xác là **Data_Brand.xlsx** và đã push lên GitHub.")
