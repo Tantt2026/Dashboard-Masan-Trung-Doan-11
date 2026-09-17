@@ -77,8 +77,9 @@ def get_targets(kpi_file):
 
 
 def color_pct(val):
+    """Tô màu theo % (nhận cả số lẫn chuỗi có dấu %)"""
     try:
-        v = float(str(val).replace('%', ''))
+        v = float(str(val).replace('%', '').strip())
         if v >= 70:
             return 'background-color: #c6f6d5'
         elif v >= 50:
@@ -173,7 +174,7 @@ def build_report(df, report_date, targets, report_type):
             'Chỉ tiêu': tgt,
             'Thực hiện (Ngày)': n,
             'MTD': m,
-            '% MTD': pct
+            '% MTD': f"{pct}%"          # <-- hiển thị dạng 88.3%
         })
 
     df_out = pd.DataFrame(results).sort_values('MTD', ascending=False).reset_index(drop=True)
@@ -308,37 +309,41 @@ if rpt_file is not None and mcp_file is not None:
         summary_rows = []
         for rtype, title, _ in report_list:
             df_r, team_tgt = build_report(df, report_date, targets, rtype)
+            pct = round(df_r['MTD'].sum() / team_tgt * 100, 1) if team_tgt else 0
             summary_rows.append({
                 'Báo cáo': title,
                 'Target': team_tgt,
                 'MTD': int(df_r['MTD'].sum()),
-                '%': round(df_r['MTD'].sum() / team_tgt * 100, 1) if team_tgt else 0
+                '% MTD': f"{pct}%"          # <-- hiển thị dạng 88.3%
             })
         summary_rows.append({
             'Báo cáo': 'Combo OFF',
             'Target': 1092,
             'MTD': total_off,
-            '%': round(total_off / 1092 * 100, 1)
+            '% MTD': f"{round(total_off / 1092 * 100, 1)}%"
         })
         summary_rows.append({
             'Báo cáo': 'Combo ON',
             'Target': 1092,
             'MTD': total_on,
-            '%': round(total_on / 1092 * 100, 1)
+            '% MTD': f"{round(total_on / 1092 * 100, 1)}%"
         })
 
         df_sum = pd.DataFrame(summary_rows)
         st.dataframe(
-            df_sum.style.map(color_pct, subset=['%']),
+            df_sum.style.map(color_pct, subset=['% MTD']),
             use_container_width=True,
             hide_index=True
         )
 
+        # Chart vẫn dùng số để vẽ
+        df_chart = df_sum.copy()
+        df_chart['pct_num'] = df_chart['% MTD'].str.replace('%', '').astype(float)
         fig = px.bar(
-            df_sum,
+            df_chart,
             x='Báo cáo',
-            y='%',
-            color='%',
+            y='pct_num',
+            color='pct_num',
             color_continuous_scale=['#fed7d7', '#fefcbf', '#c6f6d5'],
             title='% Hoàn thành các KPI'
         )
