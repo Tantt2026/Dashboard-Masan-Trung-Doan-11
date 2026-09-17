@@ -232,7 +232,8 @@ if rpt_file and mcp_file:
             )
 
             top3 = df_r.head(3)
-            st.success(f"**Top 3:** {', '.join([f\"{r['Tên NVBH']} ({r['MTD']})\" for _, r in top3.iterrows()])}")
+            top3_text = ", ".join([f"{r['Tên NVBH']} ({r['MTD']})" for _, r in top3.iterrows()])
+st.success(f"**Top 3:** {top3_text}")
 
     # Combo tab
     with tab6:
