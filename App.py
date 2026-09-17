@@ -411,19 +411,22 @@ with tab_kpi:
 
         # Style: header xanh + total xanh (trừ %MTD) + % màu
         styled = (
-            df_r.style
-            .map(color_pct, subset=['% MTD'])
-            .apply(style_total_row, axis=1)
-            .set_table_styles([
-                {'selector': 'th', 'props': [
-                    ('background-color', '#1a365d'),
-                    ('color', 'white'),
-                    ('font-weight', '700'),
-                    ('text-align', 'center')
-                ]}
-            ])
-        )
-        st.dataframe(styled, use_container_width=True, hide_index=True, height=500)
+    df_r.style
+    .map(color_pct, subset=['% MTD'])
+    .apply(style_total_row, axis=1)
+    .set_table_styles([
+        {
+            'selector': 'th',
+            'props': [
+                ('background-color', '#1a365d !important'),
+                ('color', 'white !important'),
+                ('font-weight', '700 !important'),
+                ('text-align', 'center')
+            ]
+        }
+    ], overwrite=False)
+)
+st.dataframe(styled, use_container_width=True, hide_index=True, height=500)
 
         top3 = df_r.iloc[:-1].head(3)
         bottom3 = df_r.iloc[:-1].tail(3)
