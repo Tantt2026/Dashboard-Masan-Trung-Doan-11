@@ -22,7 +22,6 @@ st.markdown("""
 
 # ====================== ĐƯỜNG DẪN FILE CỐ ĐỊNH ======================
 DATA_DIR = "data"
-
 RPT_PATH = os.path.join(DATA_DIR, "RPT_061.xlsx")
 MCP_PATH = os.path.join(DATA_DIR, "Data_MCP.xlsx")
 KPI_PATH = os.path.join(DATA_DIR, "Target_KPI.xlsx")
@@ -40,12 +39,14 @@ def load_and_process():
     df = pd.read_excel(RPT_PATH)
     mcp = pd.read_excel(MCP_PATH)
 
+    # Lọc đơn đã hủy
     df = df[df['Tình trạng đơn hàng'] != 'Đã hủy'].copy()
     df['Ngày tạo đơn hàng'] = pd.to_datetime(
         df['Ngày tạo đơn hàng'], format='%d/%m/%Y %H:%M:%S', errors='coerce'
     )
     df['date'] = df['Ngày tạo đơn hàng'].dt.date
 
+    # Map kênh
     mcp_map = mcp[['Outlet_code', 'L1']].drop_duplicates(subset=['Outlet_code'])
     mcp_map['Outlet_code'] = mcp_map['Outlet_code'].astype(str)
     df['Mã CH'] = df['Mã CH'].astype(str)
@@ -106,14 +107,25 @@ def color_pct(val):
 
 def build_report(df, report_date, targets, report_type):
     df_mtd = df[df['date'] >= date(report_date.year, report_date.month, 1)].copy()
-    df_today = df[df['date'] == report_date].copy()
     sm_names = df_mtd.groupby('Mã NVBH')['Tên NVBH'].first().to_dict()
     all_sms = sorted(sm_names.keys())
 
     if report_type == 'ASO_ALL':
-        off = df_mtd[df_mtd['L1'] == 'Kênh Off Premise']
+        # ===== LOGIC MỚI =====
+        # MTD = Distinct CH có mua ít nhất 1 lần trong tháng
+        # Thực hiện (Ngày) = Chỉ đếm CH lần đầu mua trong tháng rơi đúng ngày báo cáo
+        off = df_mtd[df_mtd['L1'] == 'Kênh Off Premise'].copy()
+
         mtd = off.groupby('Mã NVBH')['Mã CH'].nunique()
-        ngay = df_today[df_today['L1'] == 'Kênh Off Premise'].groupby('Mã NVBH')['Mã CH'].nunique()
+
+        # Tìm ngày mua đầu tiên của mỗi CH
+        first_buy = off.groupby(['Mã NVBH', 'Mã CH'])['date'].min().reset_index()
+        first_buy.columns = ['Mã NVBH', 'Mã CH', 'first_date']
+
+        # Chỉ lấy CH có ngày mua đầu tiên = ngày báo cáo
+        new_today = first_buy[first_buy['first_date'] == report_date]
+        ngay = new_today.groupby('Mã NVBH')['Mã CH'].nunique()
+
         team_tgt = 1200
         key = 'ASO_ALL'
 
@@ -125,6 +137,8 @@ def build_report(df, report_date, targets, report_type):
         lines = off.groupby(['Mã NVBH', 'Mã đơn hàng'])['Mã sản phẩm'].nunique()
         mtd = lines[lines >= 4].reset_index().groupby('Mã NVBH')['Mã đơn hàng'].nunique()
 
+        # Với PC thì vẫn đếm đơn trong ngày (vì là count đơn, không phải CH)
+        df_today = df[df['date'] == report_date]
         off_t = df_today[
             (df_today['L1'] == 'Kênh Off Premise') &
             ~df_today['Sub Division'].astype(str).str.contains('Beer|Bia', case=False, na=False)
@@ -141,6 +155,8 @@ def build_report(df, report_date, targets, report_type):
         ch = tea.groupby(['Mã NVBH', 'Mã CH'])['qty'].sum()
         mtd = ch[ch >= 12].reset_index().groupby('Mã NVBH')['Mã CH'].nunique()
 
+        # Có thể giữ nguyên hoặc áp dụng logic CH mới nếu cần
+        df_today = df[df['date'] == report_date]
         on_t = df_today[df_today['L1'] == 'Kênh On Premise']
         tea_t = on_t[on_t['Tên SP lower'].str.contains('tea|trà|ô long|olong|búp non', na=False)]
         ngay = tea_t.groupby('Mã NVBH')['Mã CH'].nunique()
@@ -154,19 +170,27 @@ def build_report(df, report_date, targets, report_type):
         )
         mtd = df_mtd[mask].groupby('Mã NVBH')['Mã CH'].nunique()
 
-        mask_t = (
-            df_today['Tên SP lower'].str.contains('omachi', na=False) &
-            df_today['Tên SP lower'].str.contains('trộn|tron|xào|xao', na=False)
-        )
-        ngay = df_today[mask_t].groupby('Mã NVBH')['Mã CH'].nunique()
+        # Áp dụng logic CH mới
+        omachi = df_mtd[mask].copy()
+        first_buy = omachi.groupby(['Mã NVBH', 'Mã CH'])['date'].min().reset_index()
+        first_buy.columns = ['Mã NVBH', 'Mã CH', 'first_date']
+        new_today = first_buy[first_buy['first_date'] == report_date]
+        ngay = new_today.groupby('Mã NVBH')['Mã CH'].nunique()
+
         team_tgt = 754
         key = None
 
     elif report_type == 'CHANTE':
         mask = df_mtd['Tên SP lower'].str.contains('chanté|chante', na=False)
         mtd = df_mtd[mask].groupby('Mã NVBH')['Mã CH'].nunique()
-        mask_t = df_today['Tên SP lower'].str.contains('chanté|chante', na=False)
-        ngay = df_today[mask_t].groupby('Mã NVBH')['Mã CH'].nunique()
+
+        # Áp dụng logic CH mới
+        chante = df_mtd[mask].copy()
+        first_buy = chante.groupby(['Mã NVBH', 'Mã CH'])['date'].min().reset_index()
+        first_buy.columns = ['Mã NVBH', 'Mã CH', 'first_date']
+        new_today = first_buy[first_buy['first_date'] == report_date]
+        ngay = new_today.groupby('Mã NVBH')['Mã CH'].nunique()
+
         team_tgt = 450
         key = 'ASO_CHANTE'
 
@@ -194,8 +218,7 @@ def build_report(df, report_date, targets, report_type):
     df_out = pd.DataFrame(results).sort_values('MTD', ascending=False).reset_index(drop=True)
     df_out.insert(0, 'STT', range(1, len(df_out) + 1))
 
-    # ========== THÊM DÒNG TỔNG CỘNG ==========
-    total_chi_tieu = int(df_out['Chỉ tiêu'].sum())
+    # Dòng TỔNG CỘNG
     total_ngay = int(df_out['Thực hiện (Ngày)'].sum())
     total_mtd = int(df_out['MTD'].sum())
     total_pct = round(total_mtd / team_tgt * 100, 1) if team_tgt else 0
@@ -204,7 +227,7 @@ def build_report(df, report_date, targets, report_type):
         'STT': '-',
         'Mã NVBH': 'TỔNG CỘNG',
         'Tên NVBH': 'SS Trương Thanh Tân Total',
-        'Chỉ tiêu': team_tgt,          # dùng target team (không cộng per SM)
+        'Chỉ tiêu': team_tgt,
         'Thực hiện (Ngày)': total_ngay,
         'MTD': total_mtd,
         '% MTD': f"{total_pct}%"
@@ -216,7 +239,6 @@ def build_report(df, report_date, targets, report_type):
 
 def build_combo(df, report_date):
     df_mtd = df[df['date'] >= date(report_date.year, report_date.month, 1)].copy()
-    df_today = df[df['date'] == report_date].copy()
     sm_names = df_mtd.groupby('Mã NVBH')['Tên NVBH'].first().to_dict()
     all_sms = sorted(sm_names.keys())
 
@@ -232,14 +254,24 @@ def build_combo(df, report_date):
         return False
 
     df_mtd = df_mtd.copy()
-    df_today = df_today.copy()
     df_mtd['is_c'] = df_mtd.apply(is_combo, axis=1)
-    df_today['is_c'] = df_today.apply(is_combo, axis=1)
 
+    # MTD
     off_mtd = df_mtd[(df_mtd['is_c']) & (df_mtd['L1'] == 'Kênh Off Premise')].groupby('Mã NVBH')['Mã CH'].nunique()
-    off_ngay = df_today[(df_today['is_c']) & (df_today['L1'] == 'Kênh Off Premise')].groupby('Mã NVBH')['Mã CH'].nunique()
     on_mtd = df_mtd[(df_mtd['is_c']) & (df_mtd['L1'] == 'Kênh On Premise')].groupby('Mã NVBH')['Mã CH'].nunique()
-    on_ngay = df_today[(df_today['is_c']) & (df_today['L1'] == 'Kênh On Premise')].groupby('Mã NVBH')['Mã CH'].nunique()
+
+    # Thực hiện Ngày = CH mới (lần đầu đạt điều kiện combo trong tháng)
+    off_combo = df_mtd[(df_mtd['is_c']) & (df_mtd['L1'] == 'Kênh Off Premise')]
+    first_off = off_combo.groupby(['Mã NVBH', 'Mã CH'])['date'].min().reset_index()
+    first_off.columns = ['Mã NVBH', 'Mã CH', 'first_date']
+    new_off = first_off[first_off['first_date'] == report_date]
+    off_ngay = new_off.groupby('Mã NVBH')['Mã CH'].nunique()
+
+    on_combo = df_mtd[(df_mtd['is_c']) & (df_mtd['L1'] == 'Kênh On Premise')]
+    first_on = on_combo.groupby(['Mã NVBH', 'Mã CH'])['date'].min().reset_index()
+    first_on.columns = ['Mã NVBH', 'Mã CH', 'first_date']
+    new_on = first_on[first_on['first_date'] == report_date]
+    on_ngay = new_on.groupby('Mã NVBH')['Mã CH'].nunique()
 
     rows = []
     for sm in all_sms:
@@ -255,7 +287,7 @@ def build_combo(df, report_date):
     df_out = pd.DataFrame(rows).sort_values('MTD (OFF)', ascending=False).reset_index(drop=True)
     df_out.insert(0, 'STT', range(1, len(df_out) + 1))
 
-    # ========== THÊM DÒNG TỔNG CỘNG COMBO ==========
+    # Dòng TỔNG CỘNG
     total_row = pd.DataFrame([{
         'STT': '-',
         'Mã NVBH': 'TỔNG CỘNG',
@@ -308,7 +340,6 @@ for rtype, title, tab in report_list:
     with tab:
         df_r, team_tgt = build_report(df, report_date, targets, rtype)
 
-        # Lấy dòng total (dòng cuối)
         total_row = df_r.iloc[-1]
         total_mtd = int(total_row['MTD'])
         total_ngay = int(total_row['Thực hiện (Ngày)'])
@@ -326,7 +357,6 @@ for rtype, title, tab in report_list:
             hide_index=True
         )
 
-        # Top 3 (bỏ dòng total)
         top3 = df_r.iloc[:-1].head(3)
         top3_text = ", ".join(
             [f"{row['Tên NVBH']} ({row['MTD']})" for _, row in top3.iterrows()]
