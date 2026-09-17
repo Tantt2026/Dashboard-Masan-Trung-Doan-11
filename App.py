@@ -65,7 +65,7 @@ st.markdown("""
     }
     .main-header h2 {
         margin: 6px 0 0 0;
-        font-size: 20px;
+        font-size: 35px;
         font-weight: 600;
         color: #fefcbf;
         letter-spacing: 0.4px;
@@ -91,26 +91,6 @@ st.markdown("""
         font-size: 13.5px;
         line-height: 1.55;
     }
-
-    /* ===== ÉP HEADER BẢNG NỀN XANH ĐẬM + CHỮ TRẮNG BOLD ===== */
-    div[data-testid="stDataFrame"] thead th,
-    div[data-testid="stDataFrame"] th,
-    .stDataFrame th,
-    table thead th,
-    [data-testid="stDataFrameResizable"] th {
-        background-color: #1a365d !important;
-        color: #ffffff !important;
-        font-weight: 700 !important;
-        text-align: center !important;
-    }
-
-    /* Ép thêm cho sticky header */
-    div[data-testid="stDataFrame"] > div > div > div > table > thead > tr > th {
-        background-color: #1a365d !important;
-        color: #ffffff !important;
-        font-weight: 700 !important;
-    }
-
     #MainMenu, footer, header {visibility: hidden;}
 </style>
 """, unsafe_allow_html=True)
@@ -411,24 +391,21 @@ with tab_kpi:
 
         # Style: header xanh + total xanh (trừ %MTD) + % màu
         styled = (
-        df_r.style
-        .map(color_pct, subset=['% MTD'])
-        .apply(style_total_row, axis=1)
-        .set_table_styles([
-        {
-            'selector': 'th',
-            'props': [
-                ('background-color', '#1a365d !important'),
-                ('color', 'white !important'),
-                ('font-weight', '700 !important'),
-                ('text-align', 'center')
-            ]
-        }
-    ], overwrite=False)
-)
-st.dataframe(styled, use_container_width=True, hide_index=True, height=500)
+            df_r.style
+            .map(color_pct, subset=['% MTD'])
+            .apply(style_total_row, axis=1)
+            .set_table_styles([
+                {'selector': 'th', 'props': [
+                    ('background-color', '#1a365d'),
+                    ('color', 'white'),
+                    ('font-weight', '700'),
+                    ('text-align', 'center')
+                ]}
+            ])
+        )
+        st.dataframe(styled, use_container_width=True, hide_index=True, height=500)
 
-            top3 = df_r.iloc[:-1].head(3)
+        top3 = df_r.iloc[:-1].head(3)
         bottom3 = df_r.iloc[:-1].tail(3)
         top3_text = ", ".join([f"{r['Tên NVBH']} ({r['MTD']})" for _, r in top3.iterrows()])
         bottom3_text = ", ".join([f"{r['Tên NVBH']} ({r['MTD']})" for _, r in bottom3.iterrows()])
