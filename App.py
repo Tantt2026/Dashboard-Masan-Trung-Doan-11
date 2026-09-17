@@ -3,7 +3,6 @@ import pandas as pd
 import numpy as np
 from datetime import date
 import os
-import base64
 
 st.set_page_config(
     page_title="TRACKING KPI ĐDKD - SS Trương Thanh Tân",
@@ -62,20 +61,19 @@ st.markdown("""
     }
     .main-header h1 {
         margin: 0;
-        font-size: 42px;          /* ← tăng gấp ba */
+        font-size: 42px;
         font-weight: 800;
         letter-spacing: 0.8px;
         line-height: 1.15;
     }
     .main-header h2 {
         margin: 6px 0 0 0;
-        font-size: 20px;          /* ← tăng gấp năm */
+        font-size: 30px;
         font-weight: 600;
         color: #fefcbf;
         letter-spacing: 0.4px;
     }
 
-    /* Tiêu đề bộ lọc màu đỏ + bold */
     .filter-label {
         font-weight: 700 !important;
         color: #c53030 !important;
@@ -98,6 +96,13 @@ st.markdown("""
         margin-top: 14px;
         font-size: 13.5px;
         line-height: 1.55;
+    }
+
+    /* Header bảng + dòng Total */
+    .stDataFrame thead tr th {
+        background-color: #1a365d !important;
+        color: white !important;
+        font-weight: 700 !important;
     }
 
     #MainMenu, footer, header {visibility: hidden;}
@@ -144,10 +149,8 @@ def load_cat_data():
     for name in ["Data_Cat.xlsx", "data_cat.xlsx", "Data_CAT.xlsx"]:
         path = os.path.join(DATA_DIR, name)
         if os.path.exists(path):
-            try:
-                return pd.read_excel(path)
-            except:
-                return pd.DataFrame()
+            try: return pd.read_excel(path)
+            except: return pd.DataFrame()
     return pd.DataFrame()
 
 
@@ -156,24 +159,19 @@ def load_brand_data():
     for name in ["Data_Brand.xlsx", "data_brand.xlsx", "Data_BRAND.xlsx"]:
         path = os.path.join(DATA_DIR, name)
         if os.path.exists(path):
-            try:
-                return pd.read_excel(path)
-            except:
-                return pd.DataFrame()
+            try: return pd.read_excel(path)
+            except: return pd.DataFrame()
     return pd.DataFrame()
 
 
 @st.cache_data(ttl=600)
 def get_targets():
-    if not os.path.exists(KPI_PATH):
-        return {}
+    if not os.path.exists(KPI_PATH): return {}
     try:
         kpi_raw = pd.read_excel(KPI_PATH, header=None)
         kpi = kpi_raw.iloc[2:].copy()
-        kpi.columns = [
-            'Region','Month','Ship to','Distributor','SUP','SM pos','SM code','SM name',
-            'Saleteam','KPI type','KPI Name','Target','Thực hiện','% actual','% Contrib','Chưa ra HĐ'
-        ]
+        kpi.columns = ['Region','Month','Ship to','Distributor','SUP','SM pos','SM code','SM name',
+                       'Saleteam','KPI type','KPI Name','Target','Thực hiện','% actual','% Contrib','Chưa ra HĐ']
         kpi = kpi.dropna(subset=['SM code'])
         kpi['Target'] = pd.to_numeric(kpi['Target'], errors='coerce')
         targets = {}
@@ -183,17 +181,13 @@ def get_targets():
             kname = str(r['KPI Name']).strip()
             tgt = r['Target']
             if pd.isna(tgt): continue
-            if ktype == 'ASO_ALL':
-                targets.setdefault(sm, {})['ASO_ALL'] = int(tgt)
-            elif ktype == 'PC_BT':
-                targets.setdefault(sm, {})['PC_BT'] = int(tgt)
-            elif ktype == 'ASO_ON':
-                targets.setdefault(sm, {})['ASO_ON'] = int(tgt)
+            if ktype == 'ASO_ALL': targets.setdefault(sm, {})['ASO_ALL'] = int(tgt)
+            elif ktype == 'PC_BT': targets.setdefault(sm, {})['PC_BT'] = int(tgt)
+            elif ktype == 'ASO_ON': targets.setdefault(sm, {})['ASO_ON'] = int(tgt)
             elif ktype == 'ASO_Focus' and 'xanh' in kname.lower():
                 targets.setdefault(sm, {})['ASO_CHANTE'] = int(tgt)
         return targets
-    except:
-        return {}
+    except: return {}
 
 
 def color_pct(val):
@@ -202,24 +196,27 @@ def color_pct(val):
         if v >= 70: return 'background-color: #c6f6d5; color:#22543d; font-weight:600'
         elif v >= 50: return 'background-color: #fefcbf; color:#744210; font-weight:600'
         else: return 'background-color: #fed7d7; color:#742a2a; font-weight:600'
-    except:
-        return ''
+    except: return ''
+
+
+def style_total_row(row):
+    """Tô nền xanh đậm + chữ trắng cho dòng TỔNG CỘNG"""
+    if str(row.get('Mã NVBH', '')).strip() == 'TỔNG CỘNG':
+        return ['background-color: #1a365d; color: white; font-weight: 700'] * len(row)
+    return [''] * len(row)
 
 
 def format_number_vn(x):
     try:
-        if pd.isnull(x) or str(x).lower() in ["none", "nan", ""]:
-            return ""
+        if pd.isnull(x) or str(x).lower() in ["none", "nan", ""]: return ""
         return f"{float(x):,.0f}".replace(",", ".")
-    except:
-        return x
+    except: return x
 
 
 def find_col(df, candidates):
     cols_lower = {c.lower().strip(): c for c in df.columns}
     for cand in candidates:
-        if cand.lower() in cols_lower:
-            return cols_lower[cand.lower()]
+        if cand.lower() in cols_lower: return cols_lower[cand.lower()]
     return None
 
 
@@ -247,8 +244,7 @@ def build_report(df, report_date, targets, report_type, filter_nv=None):
         lines = off.groupby(['Mã NVBH','Mã đơn hàng'])['Mã sản phẩm'].nunique()
         mtd = lines[lines>=4].reset_index().groupby('Mã NVBH')['Mã đơn hàng'].nunique()
         df_today = df[df['date']==report_date]
-        if filter_nv and filter_nv != "Tất cả ĐDKD":
-            df_today = df_today[df_today['Tên NVBH'] == filter_nv]
+        if filter_nv and filter_nv != "Tất cả ĐDKD": df_today = df_today[df_today['Tên NVBH'] == filter_nv]
         off_t = df_today[(df_today['L1']=='Kênh Off Premise') & ~df_today['Sub Division'].astype(str).str.contains('Beer|Bia', case=False, na=False)]
         lines_t = off_t.groupby(['Mã NVBH','Mã đơn hàng'])['Mã sản phẩm'].nunique()
         ngay = lines_t[lines_t>=4].reset_index().groupby('Mã NVBH')['Mã đơn hàng'].nunique()
@@ -262,8 +258,7 @@ def build_report(df, report_date, targets, report_type, filter_nv=None):
         ch = tea.groupby(['Mã NVBH','Mã CH'])['qty'].sum()
         mtd = ch[ch>=12].reset_index().groupby('Mã NVBH')['Mã CH'].nunique()
         df_today = df[df['date']==report_date]
-        if filter_nv and filter_nv != "Tất cả ĐDKD":
-            df_today = df_today[df_today['Tên NVBH'] == filter_nv]
+        if filter_nv and filter_nv != "Tất cả ĐDKD": df_today = df_today[df_today['Tên NVBH'] == filter_nv]
         on_t = df_today[df_today['L1']=='Kênh On Premise']
         tea_t = on_t[on_t['Tên SP lower'].str.contains('tea|trà|ô long|olong|búp non', na=False)]
         ngay = tea_t.groupby('Mã NVBH')['Mã CH'].nunique()
@@ -379,7 +374,6 @@ def build_combo(df, report_date, filter_nv=None):
 
 
 # ====================== GIAO DIỆN ======================
-# Header với Logo
 st.markdown(f"""
 <div class="main-header">
     <div class="logo">{logo_svg}</div>
@@ -457,15 +451,26 @@ with tab_kpi:
         c3.metric("📊 % MTD", pct_team)
         c4.metric("🆕 Phát sinh Ngày", f"+{total_ngay}")
 
-        st.dataframe(df_r.style.map(color_pct, subset=['% MTD']), use_container_width=True, hide_index=True, height=500)
+        # Style: header + total row + % màu
+        styled = (
+            df_r.style
+            .map(color_pct, subset=['% MTD'])
+            .apply(style_total_row, axis=1)
+        )
+        st.dataframe(styled, use_container_width=True, hide_index=True, height=500)
 
+        # Top 3 & Bottom 3
         top3 = df_r.iloc[:-1].head(3)
+        bottom3 = df_r.iloc[:-1].tail(3)
         top3_text = ", ".join([f"{r['Tên NVBH']} ({r['MTD']})" for _, r in top3.iterrows()])
+        bottom3_text = ", ".join([f"{r['Tên NVBH']} ({r['MTD']})" for _, r in bottom3.iterrows()])
+
         st.markdown(f"""
         <div class="note-box">
             <b>NHẬN XÉT ({title} - {report_date.strftime('%d/%m/%Y')}):</b><br>
             • Tiến độ MTD: <b>{total_mtd}/{team_tgt} ({pct_team})</b>. Phát sinh ngày: <b>+{total_ngay}</b>.<br>
-            • Top 3: <b>{top3_text}</b>
+            • <b>Top 3:</b> {top3_text}<br>
+            • <b>Bottom 3:</b> {bottom3_text}
         </div>
         """, unsafe_allow_html=True)
     else:
@@ -482,7 +487,9 @@ with tab_kpi:
         c2.metric("MTD ON", f"{total_on}", f"{round(total_on/1092*100,1)}%" if filter_nv=="Tất cả ĐDKD" else "")
         c3.metric("Ngày OFF", f"+{ngay_off}")
         c4.metric("Ngày ON", f"+{ngay_on}")
-        st.dataframe(df_combo, use_container_width=True, hide_index=True, height=500)
+
+        styled_combo = df_combo.style.apply(style_total_row, axis=1)
+        st.dataframe(styled_combo, use_container_width=True, hide_index=True, height=500)
 
 # ----- TAB MCP -----
 with tab_mcp:
@@ -511,22 +518,16 @@ with tab_mcp:
             f_thu = st.selectbox("", ["Tất cả các thứ", "2", "3", "4", "5", "6", "7", "25", "36", "47"], key="mcp_thu", label_visibility="collapsed")
 
         df_f = mcp.copy()
-        if f_nv != "Tất cả ĐDKD" and col_nv:
-            df_f = df_f[df_f[col_nv].astype(str) == f_nv]
-        if f_ma and col_ma:
-            df_f = df_f[df_f[col_ma].astype(str).str.contains(f_ma, case=False, na=False)]
-        if f_ten and col_ten:
-            df_f = df_f[df_f[col_ten].astype(str).str.contains(f_ten, case=False, na=False)]
+        if f_nv != "Tất cả ĐDKD" and col_nv: df_f = df_f[df_f[col_nv].astype(str) == f_nv]
+        if f_ma and col_ma: df_f = df_f[df_f[col_ma].astype(str).str.contains(f_ma, case=False, na=False)]
+        if f_ten and col_ten: df_f = df_f[df_f[col_ten].astype(str).str.contains(f_ten, case=False, na=False)]
         if f_thu != "Tất cả các thứ" and col_thu:
             thu_series = df_f[col_thu].astype(str).str.strip()
             if f_thu in ["2","3","4","5","6","7"]:
                 df_f = df_f[thu_series == f_thu]
-            elif f_thu == "25":
-                df_f = df_f[thu_series.isin(["2","5","25"])]
-            elif f_thu == "36":
-                df_f = df_f[thu_series.isin(["3","6","36"])]
-            elif f_thu == "47":
-                df_f = df_f[thu_series.isin(["4","7","47"])]
+            elif f_thu == "25": df_f = df_f[thu_series.isin(["2","5","25"])]
+            elif f_thu == "36": df_f = df_f[thu_series.isin(["3","6","36"])]
+            elif f_thu == "47": df_f = df_f[thu_series.isin(["4","7","47"])]
 
         for col in df_f.columns:
             col_lower = col.lower().replace(" ", "")
