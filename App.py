@@ -40,13 +40,13 @@ st.markdown("""
     .main-header {
         background: linear-gradient(90deg, #1a365d 0%, #2b6cb0 100%);
         color: white;
-        padding: 12px 20px;
+        padding: 14px 24px;
         border-radius: 12px;
         margin-bottom: 16px;
         box-shadow: 0 4px 12px rgba(0,0,0,0.15);
         display: flex;
         align-items: center;
-        gap: 18px;
+        gap: 20px;
     }
     .main-header .logo {
         flex-shrink: 0;
@@ -62,17 +62,17 @@ st.markdown("""
     }
     .main-header h1 {
         margin: 0;
-        font-size: 26px;
+        font-size: 42px;          /* ← tăng gấp đôi */
         font-weight: 800;
-        letter-spacing: 0.5px;
-        line-height: 1.2;
+        letter-spacing: 0.8px;
+        line-height: 1.15;
     }
     .main-header h2 {
-        margin: 4px 0 0 0;
-        font-size: 15px;
+        margin: 6px 0 0 0;
+        font-size: 20px;          /* ← tăng gấp đôi */
         font-weight: 600;
         color: #fefcbf;
-        letter-spacing: 0.3px;
+        letter-spacing: 0.4px;
     }
 
     /* Tiêu đề bộ lọc màu đỏ + bold */
