@@ -159,7 +159,7 @@ def color_pct(val):
 
 def format_number_vn(x):
     try:
-        if pd.isnull(x):
+        if pd.isnull(x) or x == "" or str(x).lower() in ["none", "nan"]:
             return ""
         return f"{float(x):,.0f}".replace(",", ".")
     except:
@@ -167,7 +167,6 @@ def format_number_vn(x):
 
 
 def find_col(df, candidates):
-    """Tìm cột theo danh sách tên có thể có"""
     cols_lower = {c.lower().strip(): c for c in df.columns}
     for cand in candidates:
         if cand.lower() in cols_lower:
@@ -457,13 +456,11 @@ with tab_mcp:
     if mcp.empty:
         st.warning("Chưa có dữ liệu MCP")
     else:
-        # Tìm cột
-        col_nv = find_col(mcp, ['SM name', 'SM Name', 'Tên NVBH', 'Nhân viên', 'Sale name', 'Position name'])
-        col_ma = find_col(mcp, ['Outlet_code', 'Outlet Code', 'Mã CH', 'Mã khách hàng', 'Poscode', 'Ship to'])
+        col_nv  = find_col(mcp, ['SM name', 'SM Name', 'Tên NVBH', 'Nhân viên', 'Sale name', 'Position name'])
+        col_ma  = find_col(mcp, ['Outlet_code', 'Outlet Code', 'Mã CH', 'Mã khách hàng', 'Poscode', 'Ship to'])
         col_ten = find_col(mcp, ['Outlet_name', 'Outlet Name', 'Tên CH', 'Tên khách hàng', 'Customer name'])
-        col_thu = find_col(mcp, ['Frequency', 'Tần suất', 'Thứ', 'Visit day', 'Ngày ghé'])
+        col_thu = find_col(mcp, ['Thứ', 'Frequency', 'Tần suất', 'Visit day', 'Ngày ghé'])
 
-        # Bộ lọc
         c1, c2, c3, c4 = st.columns(4)
         with c1:
             nv_opts = ["Tất cả ĐDKD"]
@@ -480,14 +477,36 @@ with tab_mcp:
 
         # Apply filter
         df_f = mcp.copy()
+
         if f_nv != "Tất cả ĐDKD" and col_nv:
             df_f = df_f[df_f[col_nv].astype(str) == f_nv]
+
         if f_ma and col_ma:
             df_f = df_f[df_f[col_ma].astype(str).str.contains(f_ma, case=False, na=False)]
+
         if f_ten and col_ten:
             df_f = df_f[df_f[col_ten].astype(str).str.contains(f_ten, case=False, na=False)]
+
+        # ===== SỬA LỌC THỨ =====
         if f_thu != "Tất cả các thứ" and col_thu:
-            df_f = df_f[df_f[col_thu].astype(str).str.contains(f_thu, na=False)]
+            # Chuyển cột Thứ về string để so sánh
+            thu_series = df_f[col_thu].astype(str).str.strip()
+
+            if f_thu in ["2", "3", "4", "5", "6", "7"]:
+                # Lọc chính xác thứ đơn (hoặc chứa số đó)
+                df_f = df_f[thu_series == f_thu]
+            elif f_thu == "25":
+                df_f = df_f[thu_series.isin(["2", "5", "25"])]
+            elif f_thu == "36":
+                df_f = df_f[thu_series.isin(["3", "6", "36"])]
+            elif f_thu == "47":
+                df_f = df_f[thu_series.isin(["4", "7", "47"])]
+
+        # Format cột 3M sales + các cột doanh số
+        for col in df_f.columns:
+            col_lower = col.lower().replace(" ", "")
+            if any(x in col_lower for x in ["3msales", "3m sales", "doanh số", "doanhso", "sales"]):
+                df_f[col] = pd.to_numeric(df_f[col], errors='coerce').apply(format_number_vn)
 
         st.dataframe(df_f, use_container_width=True, height=550)
         st.caption(f"Hiển thị: {len(df_f):,} / {len(mcp):,} cửa hàng")
@@ -525,7 +544,6 @@ with tab_cat:
         if f_ten and col_ten:
             df_f = df_f[df_f[col_ten].astype(str).str.contains(f_ten, case=False, na=False)]
 
-        # Format doanh số
         for col in df_f.columns:
             if "doanh số" in col.lower() or "doanhso" in col.lower().replace(" ", ""):
                 df_f[col] = pd.to_numeric(df_f[col], errors='coerce').apply(format_number_vn)
@@ -566,7 +584,6 @@ with tab_brand:
         if f_ten and col_ten:
             df_f = df_f[df_f[col_ten].astype(str).str.contains(f_ten, case=False, na=False)]
 
-        # Format doanh số
         for col in df_f.columns:
             if "doanh số" in col.lower() or "doanhso" in col.lower().replace(" ", ""):
                 df_f[col] = pd.to_numeric(df_f[col], errors='coerce').apply(format_number_vn)
