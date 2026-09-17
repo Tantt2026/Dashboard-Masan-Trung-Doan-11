@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 from datetime import date
 import plotly.express as px
+import os
 
 st.set_page_config(
     page_title="Dashboard KPI Sales - SS Trương Thanh Tân",
@@ -19,10 +20,26 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# ====================== ĐƯỜNG DẪN FILE CỐ ĐỊNH ======================
+DATA_DIR = "data"   # thư mục chứa file trên GitHub
+
+RPT_PATH = os.path.join(DATA_DIR, "RPT_061.xlsx")
+MCP_PATH = os.path.join(DATA_DIR, "Data_MCP.xlsx")
+KPI_PATH = os.path.join(DATA_DIR, "Target_KPI.xlsx")
+
 # ====================== HÀM XỬ LÝ DỮ LIỆU ======================
-def load_and_process(rpt_file, mcp_file):
-    df = pd.read_excel(rpt_file)
-    mcp = pd.read_excel(mcp_file)
+@st.cache_data(ttl=3600)
+def load_and_process():
+    """Đọc data cố định từ GitHub (thư mục data/)"""
+    if not os.path.exists(RPT_PATH):
+        st.error(f"Không tìm thấy file: {RPT_PATH}")
+        st.stop()
+    if not os.path.exists(MCP_PATH):
+        st.error(f"Không tìm thấy file: {MCP_PATH}")
+        st.stop()
+
+    df = pd.read_excel(RPT_PATH)
+    mcp = pd.read_excel(MCP_PATH)
 
     # Lọc đơn đã hủy
     df = df[df['Tình trạng đơn hàng'] != 'Đã hủy'].copy()
@@ -41,11 +58,12 @@ def load_and_process(rpt_file, mcp_file):
     return df, mcp
 
 
-def get_targets(kpi_file):
-    if kpi_file is None:
+@st.cache_data(ttl=3600)
+def get_targets():
+    if not os.path.exists(KPI_PATH):
         return {}
     try:
-        kpi_raw = pd.read_excel(kpi_file, header=None)
+        kpi_raw = pd.read_excel(KPI_PATH, header=None)
         kpi = kpi_raw.iloc[2:].copy()
         kpi.columns = [
             'Region', 'Month', 'Ship to', 'Distributor', 'SUP', 'SM pos',
@@ -77,7 +95,6 @@ def get_targets(kpi_file):
 
 
 def color_pct(val):
-    """Tô màu theo % (nhận cả số lẫn chuỗi có dấu %)"""
     try:
         v = float(str(val).replace('%', '').strip())
         if v >= 70:
@@ -174,7 +191,7 @@ def build_report(df, report_date, targets, report_type):
             'Chỉ tiêu': tgt,
             'Thực hiện (Ngày)': n,
             'MTD': m,
-            '% MTD': f"{pct}%"          # <-- hiển thị dạng 88.3%
+            '% MTD': f"{pct}%"
         })
 
     df_out = pd.DataFrame(results).sort_values('MTD', ascending=False).reset_index(drop=True)
@@ -230,133 +247,121 @@ st.markdown('<p class="main-header">📊 DASHBOARD KPI SALES</p>', unsafe_allow_
 st.markdown('<p class="sub-header">SS Trương Thanh Tân | Tháng 09/2026</p>', unsafe_allow_html=True)
 
 with st.sidebar:
-    st.header("⚙️ Cấu hình dữ liệu")
-    rpt_file = st.file_uploader("1. Upload RPT_061.xlsx", type=['xlsx'])
-    mcp_file = st.file_uploader("2. Upload Data_MCP.xlsx", type=['xlsx'])
-    kpi_file = st.file_uploader("3. Upload Target_KPI.xlsx (tùy chọn)", type=['xlsx'])
+    st.header("⚙️ Cấu hình")
     report_date = st.date_input("Ngày báo cáo", value=date(2026, 9, 16))
     st.markdown("---")
-    st.info("Upload đủ RPT_061 + Data_MCP rồi chọn tab báo cáo.")
+    st.success("Data đang lấy từ thư mục `data/` trên GitHub")
+    if st.button("🔄 Reload data (xóa cache)"):
+        st.cache_data.clear()
+        st.rerun()
 
-if rpt_file is not None and mcp_file is not None:
-    with st.spinner("Đang xử lý dữ liệu..."):
-        df, mcp = load_and_process(rpt_file, mcp_file)
-        targets = get_targets(kpi_file) if kpi_file is not None else {}
+# Load data cố định
+with st.spinner("Đang load data từ GitHub..."):
+    df, mcp = load_and_process()
+    targets = get_targets()
 
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
-        "1. ASO ALL OFF",
-        "2. PC 4-line",
-        "3. ASO Tea ON",
-        "4. Omachi Trộn",
-        "5. Chanté",
-        "6+7. Combo",
-        "📈 Tổng quan"
-    ])
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+    "1. ASO ALL OFF",
+    "2. PC 4-line",
+    "3. ASO Tea ON",
+    "4. Omachi Trộn",
+    "5. Chanté",
+    "6+7. Combo",
+    "📈 Tổng quan"
+])
 
-    # ----- Các báo cáo 1 → 5 -----
-    report_list = [
-        ('ASO_ALL', 'ASO ALL Kênh OFF', tab1),
-        ('PC_BT', 'PC BT ≥ 4 Line', tab2),
-        ('ASO_TEA', 'ASO Tea ON ≥ 12 chai', tab3),
-        ('OMACHI', 'Omachi Trộn', tab4),
-        ('CHANTE', 'Chanté', tab5),
-    ]
+# ----- Các báo cáo 1 → 5 -----
+report_list = [
+    ('ASO_ALL', 'ASO ALL Kênh OFF', tab1),
+    ('PC_BT', 'PC BT ≥ 4 Line', tab2),
+    ('ASO_TEA', 'ASO Tea ON ≥ 12 chai', tab3),
+    ('OMACHI', 'Omachi Trộn', tab4),
+    ('CHANTE', 'Chanté', tab5),
+]
 
-    for rtype, title, tab in report_list:
-        with tab:
-            df_r, team_tgt = build_report(df, report_date, targets, rtype)
-            total_mtd = int(df_r['MTD'].sum())
-            total_ngay = int(df_r['Thực hiện (Ngày)'].sum())
-            pct_team = round(total_mtd / team_tgt * 100, 1) if team_tgt else 0
-
-            c1, c2, c3, c4 = st.columns(4)
-            c1.metric("Target Team", f"{team_tgt:,}")
-            c2.metric("MTD", f"{total_mtd:,}")
-            c3.metric("% MTD", f"{pct_team}%")
-            c4.metric("Phát sinh Ngày", f"+{total_ngay}")
-
-            st.dataframe(
-                df_r.style.map(color_pct, subset=['% MTD']),
-                use_container_width=True,
-                hide_index=True
-            )
-
-            top3 = df_r.head(3)
-            top3_text = ", ".join(
-                [f"{row['Tên NVBH']} ({row['MTD']})" for _, row in top3.iterrows()]
-            )
-            st.success(f"**Top 3:** {top3_text}")
-
-    # ----- Tab Combo -----
-    with tab6:
-        df_combo = build_combo(df, report_date)
-        total_off = int(df_combo['MTD (OFF)'].sum())
-        total_on = int(df_combo['MTD (ON)'].sum())
-        ngay_off = int(df_combo['Phát sinh Ngày (OFF)'].sum())
-        ngay_on = int(df_combo['Phát sinh Ngày (ON)'].sum())
+for rtype, title, tab in report_list:
+    with tab:
+        df_r, team_tgt = build_report(df, report_date, targets, rtype)
+        total_mtd = int(df_r['MTD'].sum())
+        total_ngay = int(df_r['Thực hiện (Ngày)'].sum())
+        pct_team = round(total_mtd / team_tgt * 100, 1) if team_tgt else 0
 
         c1, c2, c3, c4 = st.columns(4)
-        c1.metric("MTD OFF", f"{total_off} / 1092", f"{round(total_off/1092*100,1)}%")
-        c2.metric("MTD ON", f"{total_on} / 1092", f"{round(total_on/1092*100,1)}%")
-        c3.metric("Ngày OFF", f"+{ngay_off}")
-        c4.metric("Ngày ON", f"+{ngay_on}")
+        c1.metric("Target Team", f"{team_tgt:,}")
+        c2.metric("MTD", f"{total_mtd:,}")
+        c3.metric("% MTD", f"{pct_team}%")
+        c4.metric("Phát sinh Ngày", f"+{total_ngay}")
 
-        st.dataframe(df_combo, use_container_width=True, hide_index=True)
-
-    # ----- Tab Tổng quan -----
-    with tab7:
-        st.subheader("Tổng hợp tiến độ các KPI")
-        summary_rows = []
-        for rtype, title, _ in report_list:
-            df_r, team_tgt = build_report(df, report_date, targets, rtype)
-            pct = round(df_r['MTD'].sum() / team_tgt * 100, 1) if team_tgt else 0
-            summary_rows.append({
-                'Báo cáo': title,
-                'Target': team_tgt,
-                'MTD': int(df_r['MTD'].sum()),
-                '% MTD': f"{pct}%"          # <-- hiển thị dạng 88.3%
-            })
-        summary_rows.append({
-            'Báo cáo': 'Combo OFF',
-            'Target': 1092,
-            'MTD': total_off,
-            '% MTD': f"{round(total_off / 1092 * 100, 1)}%"
-        })
-        summary_rows.append({
-            'Báo cáo': 'Combo ON',
-            'Target': 1092,
-            'MTD': total_on,
-            '% MTD': f"{round(total_on / 1092 * 100, 1)}%"
-        })
-
-        df_sum = pd.DataFrame(summary_rows)
         st.dataframe(
-            df_sum.style.map(color_pct, subset=['% MTD']),
+            df_r.style.map(color_pct, subset=['% MTD']),
             use_container_width=True,
             hide_index=True
         )
 
-        # Chart vẫn dùng số để vẽ
-        df_chart = df_sum.copy()
-        df_chart['pct_num'] = df_chart['% MTD'].str.replace('%', '').astype(float)
-        fig = px.bar(
-            df_chart,
-            x='Báo cáo',
-            y='pct_num',
-            color='pct_num',
-            color_continuous_scale=['#fed7d7', '#fefcbf', '#c6f6d5'],
-            title='% Hoàn thành các KPI'
+        top3 = df_r.head(3)
+        top3_text = ", ".join(
+            [f"{row['Tên NVBH']} ({row['MTD']})" for _, row in top3.iterrows()]
         )
-        fig.update_layout(yaxis_title='% MTD', xaxis_tickangle=-25)
-        st.plotly_chart(fig, use_container_width=True)
+        st.success(f"**Top 3:** {top3_text}")
 
-else:
-    st.warning("👈 Vui lòng upload **RPT_061.xlsx** và **Data_MCP.xlsx** ở sidebar để bắt đầu.")
-    st.markdown("""
-    ### Hướng dẫn sử dụng
-    1. Upload file **RPT_061.xlsx** (data đơn hàng)
-    2. Upload file **Data_MCP.xlsx** (danh sách cửa hàng + kênh)
-    3. (Tùy chọn) Upload **Target_KPI.xlsx** để lấy chỉ tiêu chính xác theo từng NV
-    4. Chọn ngày báo cáo
-    5. Xem các tab báo cáo
-    """)
+# ----- Tab Combo -----
+with tab6:
+    df_combo = build_combo(df, report_date)
+    total_off = int(df_combo['MTD (OFF)'].sum())
+    total_on = int(df_combo['MTD (ON)'].sum())
+    ngay_off = int(df_combo['Phát sinh Ngày (OFF)'].sum())
+    ngay_on = int(df_combo['Phát sinh Ngày (ON)'].sum())
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("MTD OFF", f"{total_off} / 1092", f"{round(total_off/1092*100,1)}%")
+    c2.metric("MTD ON", f"{total_on} / 1092", f"{round(total_on/1092*100,1)}%")
+    c3.metric("Ngày OFF", f"+{ngay_off}")
+    c4.metric("Ngày ON", f"+{ngay_on}")
+
+    st.dataframe(df_combo, use_container_width=True, hide_index=True)
+
+# ----- Tab Tổng quan -----
+with tab7:
+    st.subheader("Tổng hợp tiến độ các KPI")
+    summary_rows = []
+    for rtype, title, _ in report_list:
+        df_r, team_tgt = build_report(df, report_date, targets, rtype)
+        pct = round(df_r['MTD'].sum() / team_tgt * 100, 1) if team_tgt else 0
+        summary_rows.append({
+            'Báo cáo': title,
+            'Target': team_tgt,
+            'MTD': int(df_r['MTD'].sum()),
+            '% MTD': f"{pct}%"
+        })
+    summary_rows.append({
+        'Báo cáo': 'Combo OFF',
+        'Target': 1092,
+        'MTD': total_off,
+        '% MTD': f"{round(total_off / 1092 * 100, 1)}%"
+    })
+    summary_rows.append({
+        'Báo cáo': 'Combo ON',
+        'Target': 1092,
+        'MTD': total_on,
+        '% MTD': f"{round(total_on / 1092 * 100, 1)}%"
+    })
+
+    df_sum = pd.DataFrame(summary_rows)
+    st.dataframe(
+        df_sum.style.map(color_pct, subset=['% MTD']),
+        use_container_width=True,
+        hide_index=True
+    )
+
+    df_chart = df_sum.copy()
+    df_chart['pct_num'] = df_chart['% MTD'].str.replace('%', '').astype(float)
+    fig = px.bar(
+        df_chart,
+        x='Báo cáo',
+        y='pct_num',
+        color='pct_num',
+        color_continuous_scale=['#fed7d7', '#fefcbf', '#c6f6d5'],
+        title='% Hoàn thành các KPI'
+    )
+    fig.update_layout(yaxis_title='% MTD', xaxis_tickangle=-25)
+    st.plotly_chart(fig, use_container_width=True)
