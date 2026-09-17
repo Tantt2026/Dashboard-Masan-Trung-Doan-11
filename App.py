@@ -69,7 +69,7 @@ st.markdown("""
     }
     .main-header h2 {
         margin: 6px 0 0 0;
-        font-size: 20px;          /* ← tăng gấp ba */
+        font-size: 20px;          /* ← tăng gấp năm */
         font-weight: 600;
         color: #fefcbf;
         letter-spacing: 0.4px;
