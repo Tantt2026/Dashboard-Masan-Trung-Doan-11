@@ -65,7 +65,7 @@ st.markdown("""
     }
     .main-header h2 {
         margin: 6px 0 0 0;
-        font-size: 20px;
+        font-size: 30px;
         font-weight: 600;
         color: #fefcbf;
         letter-spacing: 0.4px;
@@ -91,6 +91,19 @@ st.markdown("""
         font-size: 13.5px;
         line-height: 1.55;
     }
+
+    /* ===== ÉP HEADER BẢNG NỀN XANH + CHỮ TRẮNG BOLD ===== */
+    .stDataFrame th,
+    div[data-testid="stDataFrame"] th,
+    .stDataFrame thead tr th,
+    table thead tr th,
+    .dataframe thead th {
+        background-color: #1a365d !important;
+        color: white !important;
+        font-weight: 700 !important;
+        text-align: center !important;
+    }
+
     #MainMenu, footer, header {visibility: hidden;}
 </style>
 """, unsafe_allow_html=True)
