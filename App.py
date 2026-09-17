@@ -158,13 +158,21 @@ def color_pct(val):
 
 
 def format_number_vn(x):
-    """Format số theo kiểu Việt Nam: 1.000.000"""
     try:
         if pd.isnull(x):
             return ""
         return f"{float(x):,.0f}".replace(",", ".")
     except:
         return x
+
+
+def find_col(df, candidates):
+    """Tìm cột theo danh sách tên có thể có"""
+    cols_lower = {c.lower().strip(): c for c in df.columns}
+    for cand in candidates:
+        if cand.lower() in cols_lower:
+            return cols_lower[cand.lower()]
+    return None
 
 
 # ====================== LOGIC KPI ======================
@@ -350,7 +358,6 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# Nút xóa cache
 if st.sidebar.button("🔄 Xóa Cache & Reload Data"):
     st.cache_data.clear()
     st.rerun()
@@ -361,10 +368,9 @@ with st.spinner("Đang tải dữ liệu từ GitHub..."):
     df_cat = load_cat_data()
     df_brand = load_brand_data()
 
-# Danh sách nhân viên để filter
 nv_list = ["Tất cả ĐDKD"] + sorted(df['Tên NVBH'].dropna().unique().tolist())
 
-# ========== FILTER BAR ==========
+# ========== FILTER BAR (chung cho KPI) ==========
 f1, f2, f3, f4, f5 = st.columns([1.1, 1.2, 2.3, 1.4, 1.5])
 with f1:
     st.selectbox("MONTH", ["Tháng 09/2026"], key="month")
@@ -444,49 +450,126 @@ with tab_kpi:
         c4.metric("Ngày ON", f"+{ngay_on}")
         st.dataframe(df_combo, use_container_width=True, hide_index=True, height=500)
 
-# ----- TAB MCP -----
+# ----- TAB MCP VISIT -----
 with tab_mcp:
-    st.subheader("🗺️ MCP VISIT - Danh sách Cửa hàng")
-    if not mcp.empty:
-        st.dataframe(mcp, use_container_width=True, height=600)
-        st.caption(f"Tổng số cửa hàng: {len(mcp):,}")
-    else:
+    st.subheader("🗺️ MCP VISIT & MAPPING DOANH SỐ BÁN HÀNG")
+
+    if mcp.empty:
         st.warning("Chưa có dữ liệu MCP")
+    else:
+        # Tìm cột
+        col_nv = find_col(mcp, ['SM name', 'SM Name', 'Tên NVBH', 'Nhân viên', 'Sale name', 'Position name'])
+        col_ma = find_col(mcp, ['Outlet_code', 'Outlet Code', 'Mã CH', 'Mã khách hàng', 'Poscode', 'Ship to'])
+        col_ten = find_col(mcp, ['Outlet_name', 'Outlet Name', 'Tên CH', 'Tên khách hàng', 'Customer name'])
+        col_thu = find_col(mcp, ['Frequency', 'Tần suất', 'Thứ', 'Visit day', 'Ngày ghé'])
+
+        # Bộ lọc
+        c1, c2, c3, c4 = st.columns(4)
+        with c1:
+            nv_opts = ["Tất cả ĐDKD"]
+            if col_nv:
+                nv_opts += sorted(mcp[col_nv].dropna().astype(str).unique().tolist())
+            f_nv = st.selectbox("👤 Lọc Nhân Viên (ĐDKD)", nv_opts, key="mcp_nv")
+        with c2:
+            f_ma = st.text_input("🆔 Lọc Mã Khách Hàng", key="mcp_ma")
+        with c3:
+            f_ten = st.text_input("🏪 Lọc Tên Khách Hàng", key="mcp_ten")
+        with c4:
+            thu_opts = ["Tất cả các thứ", "2", "3", "4", "5", "6", "7", "25", "36", "47"]
+            f_thu = st.selectbox("📅 Lọc Theo Thứ", thu_opts, key="mcp_thu")
+
+        # Apply filter
+        df_f = mcp.copy()
+        if f_nv != "Tất cả ĐDKD" and col_nv:
+            df_f = df_f[df_f[col_nv].astype(str) == f_nv]
+        if f_ma and col_ma:
+            df_f = df_f[df_f[col_ma].astype(str).str.contains(f_ma, case=False, na=False)]
+        if f_ten and col_ten:
+            df_f = df_f[df_f[col_ten].astype(str).str.contains(f_ten, case=False, na=False)]
+        if f_thu != "Tất cả các thứ" and col_thu:
+            df_f = df_f[df_f[col_thu].astype(str).str.contains(f_thu, na=False)]
+
+        st.dataframe(df_f, use_container_width=True, height=550)
+        st.caption(f"Hiển thị: {len(df_f):,} / {len(mcp):,} cửa hàng")
 
 # ----- TAB CAT -----
 with tab_cat:
-    st.subheader("📦 TRACKING MBS - CAT")
-    if not df_cat.empty:
-        st.success(f"✅ Đã load được Data_Cat.xlsx – {len(df_cat):,} dòng")
+    st.subheader("🎯 TRACKING MBS - THEO NGÀNH HÀNG (CATEGORY)")
 
-        df_show = df_cat.copy()
-        for col in df_show.columns:
-            col_lower = col.lower().replace(" ", "")
-            if "doanh số" in col.lower() or "doanhso" in col_lower:
-                df_show[col] = pd.to_numeric(df_show[col], errors='coerce')
-                df_show[col] = df_show[col].apply(format_number_vn)
-
-        st.dataframe(df_show, use_container_width=True, height=600)
+    if df_cat.empty:
+        st.error("❌ Không tìm thấy file Data_Cat.xlsx")
+        st.code(f"Đường dẫn: {CAT_PATH}")
     else:
-        st.error("❌ Không tìm thấy file Data_Cat.xlsx trong thư mục data/")
-        st.info("Hãy kiểm tra tên file chính xác là **Data_Cat.xlsx** và đã push lên GitHub.")
-        st.code(f"Đường dẫn đang tìm: {CAT_PATH}")
+        st.success(f"✅ Đã load Data_Cat.xlsx – {len(df_cat):,} dòng")
+
+        col_nv = find_col(df_cat, ['SM Name', 'SM name', 'Tên NVBH', 'Nhân viên', 'Sale name'])
+        col_ma = find_col(df_cat, ['Outlet Code', 'Outlet_code', 'Mã CH', 'Mã khách hàng', 'Poscode'])
+        col_ten = find_col(df_cat, ['Outlet Name', 'Outlet_name', 'Tên CH', 'Tên khách hàng'])
+
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            nv_opts = ["Tất cả ĐDKD"]
+            if col_nv:
+                nv_opts += sorted(df_cat[col_nv].dropna().astype(str).unique().tolist())
+            f_nv = st.selectbox("👤 Lọc Nhân Viên (ĐDKD)", nv_opts, key="cat_nv")
+        with c2:
+            f_ma = st.text_input("🆔 Lọc Mã Khách Hàng", key="cat_ma")
+        with c3:
+            f_ten = st.text_input("🏪 Lọc Tên Khách Hàng", key="cat_ten")
+
+        df_f = df_cat.copy()
+        if f_nv != "Tất cả ĐDKD" and col_nv:
+            df_f = df_f[df_f[col_nv].astype(str) == f_nv]
+        if f_ma and col_ma:
+            df_f = df_f[df_f[col_ma].astype(str).str.contains(f_ma, case=False, na=False)]
+        if f_ten and col_ten:
+            df_f = df_f[df_f[col_ten].astype(str).str.contains(f_ten, case=False, na=False)]
+
+        # Format doanh số
+        for col in df_f.columns:
+            if "doanh số" in col.lower() or "doanhso" in col.lower().replace(" ", ""):
+                df_f[col] = pd.to_numeric(df_f[col], errors='coerce').apply(format_number_vn)
+
+        st.dataframe(df_f, use_container_width=True, height=550)
+        st.caption(f"Hiển thị: {len(df_f):,} / {len(df_cat):,} dòng")
 
 # ----- TAB BRAND -----
 with tab_brand:
-    st.subheader("🏷️ TRACKING MBS - BRAND")
-    if not df_brand.empty:
-        st.success(f"✅ Đã load được Data_Brand.xlsx – {len(df_brand):,} dòng")
+    st.subheader("🏷️ TRACKING MBS - THEO THƯƠNG HIỆU (BRAND)")
 
-        df_show = df_brand.copy()
-        for col in df_show.columns:
-            col_lower = col.lower().replace(" ", "")
-            if "doanh số" in col.lower() or "doanhso" in col_lower:
-                df_show[col] = pd.to_numeric(df_show[col], errors='coerce')
-                df_show[col] = df_show[col].apply(format_number_vn)
-
-        st.dataframe(df_show, use_container_width=True, height=600)
+    if df_brand.empty:
+        st.error("❌ Không tìm thấy file Data_Brand.xlsx")
+        st.code(f"Đường dẫn: {BRAND_PATH}")
     else:
-        st.error("❌ Không tìm thấy file Data_Brand.xlsx trong thư mục data/")
-        st.info("Hãy kiểm tra tên file chính xác là **Data_Brand.xlsx** và đã push lên GitHub.")
-        st.code(f"Đường dẫn đang tìm: {BRAND_PATH}")
+        st.success(f"✅ Đã load Data_Brand.xlsx – {len(df_brand):,} dòng")
+
+        col_nv = find_col(df_brand, ['SM Name', 'SM name', 'Tên NVBH', 'Nhân viên', 'Sale name'])
+        col_ma = find_col(df_brand, ['Outlet Code', 'Outlet_code', 'Mã CH', 'Mã khách hàng', 'Poscode'])
+        col_ten = find_col(df_brand, ['Outlet Name', 'Outlet_name', 'Tên CH', 'Tên khách hàng'])
+
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            nv_opts = ["Tất cả ĐDKD"]
+            if col_nv:
+                nv_opts += sorted(df_brand[col_nv].dropna().astype(str).unique().tolist())
+            f_nv = st.selectbox("👤 Lọc Nhân Viên (ĐDKD)", nv_opts, key="brand_nv")
+        with c2:
+            f_ma = st.text_input("🆔 Lọc Mã Khách Hàng", key="brand_ma")
+        with c3:
+            f_ten = st.text_input("🏪 Lọc Tên Khách Hàng", key="brand_ten")
+
+        df_f = df_brand.copy()
+        if f_nv != "Tất cả ĐDKD" and col_nv:
+            df_f = df_f[df_f[col_nv].astype(str) == f_nv]
+        if f_ma and col_ma:
+            df_f = df_f[df_f[col_ma].astype(str).str.contains(f_ma, case=False, na=False)]
+        if f_ten and col_ten:
+            df_f = df_f[df_f[col_ten].astype(str).str.contains(f_ten, case=False, na=False)]
+
+        # Format doanh số
+        for col in df_f.columns:
+            if "doanh số" in col.lower() or "doanhso" in col.lower().replace(" ", ""):
+                df_f[col] = pd.to_numeric(df_f[col], errors='coerce').apply(format_number_vn)
+
+        st.dataframe(df_f, use_container_width=True, height=550)
+        st.caption(f"Hiển thị: {len(df_f):,} / {len(df_brand):,} dòng")
