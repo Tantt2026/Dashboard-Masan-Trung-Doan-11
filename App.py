@@ -189,7 +189,6 @@ def get_targets():
             if pd.isna(tgt): continue
             ktype_lower, kname_lower = ktype.lower(), kname.lower()
             
-            # Map chuẩn xác theo file Excel Target_KPI thực tế
             if ktype_lower == 'aso_all': 
                 targets.setdefault(sm, {})['ASO_ALL'] = int(tgt)
             elif ktype_lower == 'pc_bt': 
@@ -391,14 +390,17 @@ st.markdown(f"""
     <div class="logo">{logo_svg}</div>
     <div class="title-block">
         <h1>SƯ ĐOÀN HCM4 - TRUNG ĐOÀN 10</h1>
-        <h2>TRACKING KPI ĐDKD - TEAM SS TRƯƠNG THANH TÂN </h2>
+        <h2>TRACKING KPI ĐDKD - TEAM SS TRƯƠNG THANH TÂN</h2>
     </div>
 </div>
 """, unsafe_allow_html=True)
 
-if st.sidebar.button("🔄 Xóa Cache & Reload Data"):
-    st.cache_data.clear()
-    st.rerun()
+# Nút Xóa Cache & Reload Data hiện trực tiếp trên màn hình chính
+col_reload, col_empty = st.columns([2, 5])
+with col_reload:
+    if st.button("🔄 Xóa Cache & Reload Dữ Liệu"):
+        st.cache_data.clear()
+        st.rerun()
 
 with st.spinner("Đang tải dữ liệu..."):
     df, mcp = load_main_data()
@@ -415,7 +417,7 @@ with f1:
     st.selectbox("", ["Tháng 09/2026"], key="month", label_visibility="collapsed")
 with f2:
     st.markdown('<p class="filter-label">NGÀY</p>', unsafe_allow_html=True)
-    report_date = st.date_input("", value=date(2026, 9, 16), key="ngay", label_visibility="collapsed")
+    report_date = st.date_input("", value=date(2026, 9, 17), key="ngay", label_visibility="collapsed")
 with f3:
     st.markdown('<p class="filter-label">KPI NAME</p>', unsafe_allow_html=True)
     kpi_map = {
