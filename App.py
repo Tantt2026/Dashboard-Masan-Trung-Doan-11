@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 from datetime import date
 import os
+import base64
 
 st.set_page_config(
     page_title="TRACKING KPI ĐDKD - SS Trương Thanh Tân",
@@ -11,20 +12,76 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
+# ====================== LOGO ======================
+logo_svg = """
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 158.15 61.91" width="140" height="55">
+<title>Masan Group logo</title>
+<path d="M490.29,502.16s17.83-12.81,45.76-12.93c25.9-.11,30.18,8.14,38,10.79,0,0-3.8,5.82-5.78,9.63s-13.32,17.93-26.5,22.21c0,0,18.71-15.72,21.55-27.57,0,0-26.87-20.43-73.26-1.92" transform="translate(-432.92 -481.05)" style="fill:#f36f21"/>
+<path d="M521.55,489.11c42-10.64,59.59,9.56,59.59,9.56A60.39,60.39,0,0,1,561,521.3c11.28-1.28,21.79-13,24-16.69s6.16-9.17,6.16-9.17c-7.12-3.22-13.13-12-35.93-14.22-16.3-1.59-33.6,7.88-33.6,7.88" transform="translate(-432.92 -481.05)" style="fill:#034ea2"/>
+<path d="M454.12,528V512.92a58.92,58.92,0,0,1-.15-6.31l-.06,0-7.1,21.11h-3.41l-7.25-21h-.09c0,2.33.1,5.52.09,6.28v15h-3.24V502.39h4.8L445.1,524h.07l7.17-21.31h5V528Z" transform="translate(-432.92 -481.05)" style="fill:#034ea2"/>
+<path d="M465.15,515c.21-1.42.7-3.56,4.21-3.58,2.94,0,4.35,1,4.37,3s-.87,2.12-1.62,2.19l-5.11.65c-5.13.67-5.58,4.26-5.57,5.81,0,3.16,2.42,5.3,5.8,5.29a8.32,8.32,0,0,0,6.64-3c.12,1.42.55,2.82,3.3,2.81a6.24,6.24,0,0,0,1.69-.36v-2.26a4.84,4.84,0,0,1-1,.14c-.63,0-1-.3-1-1.09l-.05-10.6c0-4.73-5.37-5.13-6.85-5.13-4.54,0-7.47,1.76-7.6,6.17Zm8.42,6.37c0,2.48-2.85,4.35-5.74,4.36-2.35,0-3.38-1.17-3.39-3.19,0-2.32,2.42-2.8,4-3,3.86-.52,4.64-.78,5.15-1.18Z" transform="translate(-432.92 -481.05)" style="fill:#034ea2"/>
+<path d="M492.47,514.47c0-1.17-.47-3.12-4.44-3.1-1,0-3.7.34-3.7,2.64,0,1.53,1,1.88,3.4,2.46l3.14.77c3.89.94,5.27,2.35,5.27,4.87,0,3.83-3.15,6.14-7.37,6.16-7.39,0-7.94-4.21-8-6.44h3c.11,1.45.55,3.78,5,3.75,2.24,0,4.27-.89,4.26-3,0-1.47-1-2-3.72-2.63l-3.65-.88c-2.59-.62-4.31-1.91-4.34-4.46,0-4.09,3.39-6,7.05-6,6.66,0,7.17,4.87,7.17,5.78Z" transform="translate(-432.92 -481.05)" style="fill:#034ea2"/>
+<path d="M502.6,514.75c.2-1.42.68-3.58,4.2-3.6,2.91,0,4.33,1.06,4.33,3s-.86,2.13-1.61,2.18l-5.1.66c-5.11.65-5.57,4.27-5.56,5.79,0,3.19,2.41,5.31,5.79,5.31a8.34,8.34,0,0,0,6.63-3c.11,1.41.53,2.83,3.28,2.8a5.87,5.87,0,0,0,1.68-.35l0-2.26a6.5,6.5,0,0,1-1,.15c-.62,0-1-.32-1-1.1l0-10.61c0-4.72-5.35-5.11-6.83-5.11-4.53,0-7.44,1.76-7.56,6.16Zm8.36,6.49c0,2.47-2.82,4.36-5.74,4.37-2.35,0-3.37-1.18-3.39-3.18,0-2.34,2.44-2.8,4-3,3.87-.51,4.65-.8,5.14-1.2Z" transform="translate(-432.92 -481.05)" style="fill:#034ea2"/>
+<path d="M534.55,527.71h-3v-11.5c-.13-3.2-1.07-4.83-4.13-4.81-1.77,0-4.88,1.15-4.7,6.15v10.16h-3.24l-.07-18.56h2.72l0,2.66h.07a6.85,6.85,0,0,1,5.67-3.19c2.91,0,6.58,1.15,6.6,6.45Z" transform="translate(-432.92 -481.05)" style="fill:#034ea2"/>
+<path d="M468,533.85a1.19,1.19,0,0,1,.07.34.6.6,0,0,1-.19.46.81.81,0,0,1-.51.21l-.54-.18q-.45-.15-.75-.23a2.37,2.37,0,0,0-.59-.08,2.27,2.27,0,0,0-1.47.49,3.1,3.1,0,0,0-.92,1.27,4.89,4.89,0,0,0-.35,1.64,5.25,5.25,0,0,0,.56,2.41,2.27,2.27,0,0,0,1.91,1.26.77.77,0,0,1,.27,0l.43-.06.37-.1.37-.15L467,541a1,1,0,0,1,.4-.11.54.54,0,0,1,.42.19.69.69,0,0,1,.17.48,1,1,0,0,1-.82,1,5.35,5.35,0,0,1-1.69.27,4.1,4.1,0,0,1-2.28-.63,4.15,4.15,0,0,1-1.5-1.71,5.52,5.52,0,0,1-.55-2.35,7.3,7.3,0,0,1,.25-1.93,5,5,0,0,1,.76-1.63,3.74,3.74,0,0,1,1.34-1.14,4.33,4.33,0,0,1,1.91-.45,4.73,4.73,0,0,1,1.68.27,1.72,1.72,0,0,1,.91.62" transform="translate(-432.92 -481.05)" style="fill:#034ea2"/>
+<path d="M470.75,537.9a4.78,4.78,0,0,0,.63,2.45,2.13,2.13,0,0,0,2,1.1,2.3,2.3,0,0,0,1.48-.48,2.78,2.78,0,0,0,.88-1.28,5.69,5.69,0,0,0,.31-1.78,5.11,5.11,0,0,0-.3-1.78,2.94,2.94,0,0,0-.89-1.29,2.21,2.21,0,0,0-1.44-.48,2.3,2.3,0,0,0-1.44.46,2.82,2.82,0,0,0-.91,1.27,5.12,5.12,0,0,0-.31,1.82m-1.59,0a5.74,5.74,0,0,1,.54-2.53,4.26,4.26,0,0,1,1.51-1.76,4,4,0,0,1,4.42.06,4.39,4.39,0,0,1,1.47,1.8,5.8,5.8,0,0,1,.51,2.43,5.89,5.89,0,0,1-.51,2.46,4.25,4.25,0,0,1-1.47,1.79,4.11,4.11,0,0,1-4.49,0,4.31,4.31,0,0,1-1.48-1.8,5.85,5.85,0,0,1-.51-2.44" transform="translate(-432.92 -481.05)" style="fill:#034ea2"/>
+<path d="M479.44,534.07a.79.79,0,0,1,.21-.58.7.7,0,0,1,.52-.21.73.73,0,0,1,.53.21.78.78,0,0,1,.22.59v.14l0,0a3,3,0,0,1,1.13-.91,3.31,3.31,0,0,1,1.43-.32,3.46,3.46,0,0,1,1.63.4,3,3,0,0,1,1.21,1.21,4,4,0,0,1,.46,2V542a.68.68,0,0,1-.22.54.77.77,0,0,1-.53.19.73.73,0,0,1-.51-.19.69.69,0,0,1-.21-.53v-5.36a2.16,2.16,0,0,0-.65-1.67,2.21,2.21,0,0,0-1.55-.6,2.32,2.32,0,0,0-1.09.26,2,2,0,0,0-.82.79,2.41,2.41,0,0,0-.31,1.25v5.05a.81.81,0,0,1-.2.59.68.68,0,0,1-.51.21.74.74,0,0,1-.54-.22.77.77,0,0,1-.23-.58Z" transform="translate(-432.92 -481.05)" style="fill:#034ea2"/>
+<path d="M488.69,541.75a1.05,1.05,0,0,1-.44-.77.7.7,0,0,1,.2-.49.64.64,0,0,1,.49-.21,1,1,0,0,1,.46.13,6.25,6.25,0,0,1,.57.37,3.06,3.06,0,0,0,.49.31,3,3,0,0,0,1.34.36,2.88,2.88,0,0,0,1.37-.32,1.06,1.06,0,0,0,.6-1A1.24,1.24,0,0,0,493,539a9.34,9.34,0,0,0-1.39-.65q-1-.4-1.55-.68a3.05,3.05,0,0,1-1-.79,1.94,1.94,0,0,1-.42-1.28,2.36,2.36,0,0,1,.39-1.31,2.79,2.79,0,0,1,1.11-1,4,4,0,0,1,1.64-.4,5,5,0,0,1,1.71.3,3.57,3.57,0,0,1,1.22.66,1.1,1.1,0,0,1,.38.74.65.65,0,0,1-.21.47.78.78,0,0,1-.5.23,4.06,4.06,0,0,1-.89-.41c-.39-.22-.67-.38-.86-.46a1.78,1.78,0,0,0-.69-.15,2,2,0,0,0-1.28.35,1.16,1.16,0,0,0-.46.86,1.34,1.34,0,0,0,.42.75,2.92,2.92,0,0,0,.78.52q.44.2,1.07.41c.42.14.71.25.87.32a3.77,3.77,0,0,1,1.54,1,2.2,2.2,0,0,1,.47,1.42,2.72,2.72,0,0,1-.42,1.37,2.86,2.86,0,0,1-1.19,1,4.49,4.49,0,0,1-2,.41,4.67,4.67,0,0,1-3.14-1.06" transform="translate(-432.92 -481.05)" style="fill:#034ea2"/>
+<path d="M496.81,533.76a.74.74,0,0,1,.21-.56.71.71,0,0,1,.52-.21.74.74,0,0,1,.53.2.73.73,0,0,1,.22.56V539a2.75,2.75,0,0,0,.58,1.85,2.16,2.16,0,0,0,1.74.69q2.38,0,2.38-2.53v-5.22a.74.74,0,0,1,.21-.56.71.71,0,0,1,.51-.21.74.74,0,0,1,.53.2.73.73,0,0,1,.22.56v5.3a4.35,4.35,0,0,1-.4,1.86,3.14,3.14,0,0,1-1.27,1.38,4.23,4.23,0,0,1-2.22.53,4,4,0,0,1-2.11-.51,3.14,3.14,0,0,1-1.25-1.37,4.36,4.36,0,0,1-.4-1.88Z" transform="translate(-432.92 -481.05)" style="fill:#034ea2"/>
+<path d="M506.53,533.81a.7.7,0,0,1,.22-.53.76.76,0,0,1,.54-.21.68.68,0,0,1,.51.2.84.84,0,0,1,.2.61v.3h.94a2.69,2.69,0,0,1,2.29-1.15,2.75,2.75,0,0,1,2.4,1.62,3.7,3.7,0,0,1,1.29-1.26,3.26,3.26,0,0,1,1.53-.36,3,3,0,0,1,1.52.44,3,3,0,0,1,1.1,1.21,3.92,3.92,0,0,1,.41,1.84v5.58a.74.74,0,0,1-.22.57.74.74,0,0,1-.53.21.7.7,0,0,1-.5-.22.76.76,0,0,1-.22-.56v-5.54a2.57,2.57,0,0,0-.27-1.21,1.78,1.78,0,0,0-.72-.76,2.08,2.08,0,0,0-1-.25,2.2,2.2,0,0,0-1.51.53,2.14,2.14,0,0,0-.6,1.69v5.5a.62.62,0,0,1-.22.51.8.8,0,0,1-.53.18.75.75,0,0,1-.5-.18.63.63,0,0,1-.22-.5v-5.34a2.48,2.48,0,0,0-.63-1.87,2.18,2.18,0,0,0-1.57-.6,2.85,2.85,0,0,0-1.12.26,1.84,1.84,0,0,0-.8.74,2.45,2.45,0,0,0-.3,1.28v5.57a.75.75,0,0,1-.22.57.73.73,0,0,1-.52.21.7.7,0,0,1-.51-.22.75.75,0,0,1-.22-.56Z" transform="translate(-432.92 -481.05)" style="fill:#034ea2"/>
+<path d="M522.43,537.42h5.42a3.31,3.31,0,0,0-.7-2.13,2.38,2.38,0,0,0-1.86-.83,2.53,2.53,0,0,0-1.94.78,3.25,3.25,0,0,0-.79,2.18m-1.59.47a6.14,6.14,0,0,1,.56-2.34,4.52,4.52,0,0,1,1.46-1.79,3.92,3.92,0,0,1,4.43,0,4.44,4.44,0,0,1,1.49,1.78,5.34,5.34,0,0,1,.53,2.31q0,.78-.88.78h-6a3.22,3.22,0,0,0,.41,1.62,2.5,2.5,0,0,0,1.05,1,3.23,3.23,0,0,0,1.46.33,3.91,3.91,0,0,0,2.58-1,1.26,1.26,0,0,1,.6-.29.49.49,0,0,1,.41.2.78.78,0,0,1,.15.47.9.9,0,0,1-.23.58,4.46,4.46,0,0,1-1.5,1,5.2,5.2,0,0,1-2.09.42,4.42,4.42,0,0,1-2-.44,3.84,3.84,0,0,1-1.39-1.17,5,5,0,0,1-.77-1.58,6.65,6.65,0,0,1-.26-1.72l0-.06v0" transform="translate(-432.92 -481.05)" style="fill:#034ea2"/>
+<path d="M531,534a.83.83,0,0,1,.21-.59.69.69,0,0,1,.52-.22.72.72,0,0,1,.53.22.81.81,0,0,1,.22.6v.81h0a4.3,4.3,0,0,1,.87-1.13,1.77,1.77,0,0,1,1.13-.53.85.85,0,0,1,.59.23.76.76,0,0,1,.26.58.69.69,0,0,1-.26.6,2.4,2.4,0,0,1-.76.33,3.19,3.19,0,0,0-.65.23,2.54,2.54,0,0,0-1.2,2.4v4.66a.84.84,0,0,1-.2.6.68.68,0,0,1-.51.21.73.73,0,0,1-.54-.22.86.86,0,0,1-.22-.63Z" transform="translate(-432.92 -481.05)" style="fill:#034ea2"/>
+</svg>
+"""
+
 # ====================== CSS ======================
 st.markdown("""
 <style>
     .main-header {
         background: linear-gradient(90deg, #1a365d 0%, #2b6cb0 100%);
         color: white;
-        padding: 16px 24px;
-        border-radius: 10px;
-        text-align: center;
-        margin-bottom: 18px;
+        padding: 12px 20px;
+        border-radius: 12px;
+        margin-bottom: 16px;
         box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        display: flex;
+        align-items: center;
+        gap: 18px;
     }
-    .main-header h1 { margin: 0; font-size: 20px; font-weight: 700; }
-    .main-header h2 { margin: 4px 0 0 0; font-size: 15px; font-weight: 500; color: #fefcbf; }
+    .main-header .logo {
+        flex-shrink: 0;
+        background: white;
+        border-radius: 8px;
+        padding: 6px 10px;
+        display: flex;
+        align-items: center;
+    }
+    .main-header .title-block {
+        flex: 1;
+        text-align: center;
+    }
+    .main-header h1 {
+        margin: 0;
+        font-size: 26px;
+        font-weight: 800;
+        letter-spacing: 0.5px;
+        line-height: 1.2;
+    }
+    .main-header h2 {
+        margin: 4px 0 0 0;
+        font-size: 15px;
+        font-weight: 600;
+        color: #fefcbf;
+        letter-spacing: 0.3px;
+    }
+
+    /* Tiêu đề bộ lọc màu đỏ + bold */
+    .filter-label {
+        font-weight: 700 !important;
+        color: #c53030 !important;
+        font-size: 13px !important;
+        margin-bottom: 2px;
+    }
 
     div[data-testid="stMetric"] {
         background: white;
@@ -49,7 +106,6 @@ st.markdown("""
 
 # ====================== ĐƯỜNG DẪN FILE ======================
 DATA_DIR = "data"
-
 RPT_PATH   = os.path.join(DATA_DIR, "RPT_061.xlsx")
 MCP_PATH   = os.path.join(DATA_DIR, "Data_MCP.xlsx")
 KPI_PATH   = os.path.join(DATA_DIR, "Target_KPI.xlsx")
@@ -85,28 +141,24 @@ def load_main_data():
 
 @st.cache_data(ttl=600)
 def load_cat_data():
-    possible_names = ["Data_Cat.xlsx", "data_cat.xlsx", "Data_CAT.xlsx", "CAT.xlsx"]
-    for name in possible_names:
+    for name in ["Data_Cat.xlsx", "data_cat.xlsx", "Data_CAT.xlsx"]:
         path = os.path.join(DATA_DIR, name)
         if os.path.exists(path):
             try:
                 return pd.read_excel(path)
-            except Exception as e:
-                st.warning(f"Lỗi đọc {name}: {e}")
+            except:
                 return pd.DataFrame()
     return pd.DataFrame()
 
 
 @st.cache_data(ttl=600)
 def load_brand_data():
-    possible_names = ["Data_Brand.xlsx", "data_brand.xlsx", "Data_BRAND.xlsx", "Brand.xlsx"]
-    for name in possible_names:
+    for name in ["Data_Brand.xlsx", "data_brand.xlsx", "Data_BRAND.xlsx"]:
         path = os.path.join(DATA_DIR, name)
         if os.path.exists(path):
             try:
                 return pd.read_excel(path)
-            except Exception as e:
-                st.warning(f"Lỗi đọc {name}: {e}")
+            except:
                 return pd.DataFrame()
     return pd.DataFrame()
 
@@ -140,26 +192,23 @@ def get_targets():
             elif ktype == 'ASO_Focus' and 'xanh' in kname.lower():
                 targets.setdefault(sm, {})['ASO_CHANTE'] = int(tgt)
         return targets
-    except Exception:
+    except:
         return {}
 
 
 def color_pct(val):
     try:
         v = float(str(val).replace('%','').strip())
-        if v >= 70:
-            return 'background-color: #c6f6d5; color:#22543d; font-weight:600'
-        elif v >= 50:
-            return 'background-color: #fefcbf; color:#744210; font-weight:600'
-        else:
-            return 'background-color: #fed7d7; color:#742a2a; font-weight:600'
+        if v >= 70: return 'background-color: #c6f6d5; color:#22543d; font-weight:600'
+        elif v >= 50: return 'background-color: #fefcbf; color:#744210; font-weight:600'
+        else: return 'background-color: #fed7d7; color:#742a2a; font-weight:600'
     except:
         return ''
 
 
 def format_number_vn(x):
     try:
-        if pd.isnull(x) or x == "" or str(x).lower() in ["none", "nan"]:
+        if pd.isnull(x) or str(x).lower() in ["none", "nan", ""]:
             return ""
         return f"{float(x):,.0f}".replace(",", ".")
     except:
@@ -177,7 +226,6 @@ def find_col(df, candidates):
 # ====================== LOGIC KPI ======================
 def build_report(df, report_date, targets, report_type, filter_nv=None):
     df_mtd = df[df['date'] >= date(report_date.year, report_date.month, 1)].copy()
-
     if filter_nv and filter_nv != "Tất cả ĐDKD":
         df_mtd = df_mtd[df_mtd['Tên NVBH'] == filter_nv]
 
@@ -195,19 +243,13 @@ def build_report(df, report_date, targets, report_type, filter_nv=None):
         title = "5. ASO ALL KÊNH OFF"
 
     elif report_type == 'PC_BT':
-        off = df_mtd[
-            (df_mtd['L1']=='Kênh Off Premise') &
-            ~df_mtd['Sub Division'].astype(str).str.contains('Beer|Bia', case=False, na=False)
-        ]
+        off = df_mtd[(df_mtd['L1']=='Kênh Off Premise') & ~df_mtd['Sub Division'].astype(str).str.contains('Beer|Bia', case=False, na=False)]
         lines = off.groupby(['Mã NVBH','Mã đơn hàng'])['Mã sản phẩm'].nunique()
         mtd = lines[lines>=4].reset_index().groupby('Mã NVBH')['Mã đơn hàng'].nunique()
         df_today = df[df['date']==report_date]
         if filter_nv and filter_nv != "Tất cả ĐDKD":
             df_today = df_today[df_today['Tên NVBH'] == filter_nv]
-        off_t = df_today[
-            (df_today['L1']=='Kênh Off Premise') &
-            ~df_today['Sub Division'].astype(str).str.contains('Beer|Bia', case=False, na=False)
-        ]
+        off_t = df_today[(df_today['L1']=='Kênh Off Premise') & ~df_today['Sub Division'].astype(str).str.contains('Beer|Bia', case=False, na=False)]
         lines_t = off_t.groupby(['Mã NVBH','Mã đơn hàng'])['Mã sản phẩm'].nunique()
         ngay = lines_t[lines_t>=4].reset_index().groupby('Mã NVBH')['Mã đơn hàng'].nunique()
         team_tgt, key = 2667, 'PC_BT'
@@ -229,10 +271,7 @@ def build_report(df, report_date, targets, report_type, filter_nv=None):
         title = "3. ASO TEA KÊNH ON PREMISE"
 
     elif report_type == 'OMACHI':
-        mask = (
-            df_mtd['Tên SP lower'].str.contains('omachi', na=False) &
-            df_mtd['Tên SP lower'].str.contains('trộn|tron|xào|xao', na=False)
-        )
+        mask = df_mtd['Tên SP lower'].str.contains('omachi', na=False) & df_mtd['Tên SP lower'].str.contains('trộn|tron|xào|xao', na=False)
         mtd = df_mtd[mask].groupby('Mã NVBH')['Mã CH'].nunique()
         omachi = df_mtd[mask].copy()
         first_buy = omachi.groupby(['Mã NVBH','Mã CH'])['date'].min().reset_index()
@@ -252,7 +291,6 @@ def build_report(df, report_date, targets, report_type, filter_nv=None):
         ngay = new_today.groupby('Mã NVBH')['Mã CH'].nunique()
         team_tgt, key = 450, 'ASO_CHANTE'
         title = "1. ASO FOCUS TOTAL NHÃN CHANTÉ"
-
     else:
         return pd.DataFrame(), 0, ""
 
@@ -263,12 +301,8 @@ def build_report(df, report_date, targets, report_type, filter_nv=None):
         n = int(ngay.get(sm, 0))
         pct = round(m/tgt*100, 1) if tgt else 0
         results.append({
-            'Mã NVBH': sm,
-            'Tên NVBH': sm_names.get(sm, ''),
-            'Chỉ Tiêu KPI': tgt,
-            'Thực Hiện Ngày': n,
-            'MTD': m,
-            '% MTD': f"{pct}%"
+            'Mã NVBH': sm, 'Tên NVBH': sm_names.get(sm, ''),
+            'Chỉ Tiêu KPI': tgt, 'Thực Hiện Ngày': n, 'MTD': m, '% MTD': f"{pct}%"
         })
 
     df_out = pd.DataFrame(results).sort_values('MTD', ascending=False).reset_index(drop=True)
@@ -279,13 +313,10 @@ def build_report(df, report_date, targets, report_type, filter_nv=None):
     total_pct = round(total_mtd/team_tgt*100, 1) if team_tgt else 0
 
     total_row = pd.DataFrame([{
-        'STT': '-',
-        'Mã NVBH': 'TỔNG CỘNG',
+        'STT': '-', 'Mã NVBH': 'TỔNG CỘNG',
         'Tên NVBH': 'SS Trương Thanh Tân Total' if filter_nv == "Tất cả ĐDKD" else filter_nv,
         'Chỉ Tiêu KPI': team_tgt if filter_nv == "Tất cả ĐDKD" else (results[0]['Chỉ Tiêu KPI'] if results else 0),
-        'Thực Hiện Ngày': total_ngay,
-        'MTD': total_mtd,
-        '% MTD': f"{total_pct}%"
+        'Thực Hiện Ngày': total_ngay, 'MTD': total_mtd, '% MTD': f"{total_pct}%"
     }])
     df_out = pd.concat([df_out, total_row], ignore_index=True)
     return df_out, team_tgt, title
@@ -327,8 +358,7 @@ def build_combo(df, report_date, filter_nv=None):
     rows = []
     for sm in all_sms:
         rows.append({
-            'Mã NVBH': sm,
-            'Tên NVBH': sm_names.get(sm,''),
+            'Mã NVBH': sm, 'Tên NVBH': sm_names.get(sm,''),
             'Phát sinh Ngày (OFF)': int(off_ngay.get(sm,0)),
             'MTD (OFF)': int(off_mtd.get(sm,0)),
             'Phát sinh Ngày (ON)': int(on_ngay.get(sm,0)),
@@ -338,8 +368,7 @@ def build_combo(df, report_date, filter_nv=None):
     df_out.insert(0, 'STT', range(1, len(df_out)+1))
 
     total_row = pd.DataFrame([{
-        'STT': '-',
-        'Mã NVBH': 'TỔNG CỘNG',
+        'STT': '-', 'Mã NVBH': 'TỔNG CỘNG',
         'Tên NVBH': 'SS Trương Thanh Tân Total' if filter_nv=="Tất cả ĐDKD" else filter_nv,
         'Phát sinh Ngày (OFF)': int(df_out['Phát sinh Ngày (OFF)'].sum()) if not df_out.empty else 0,
         'MTD (OFF)': int(df_out['MTD (OFF)'].sum()) if not df_out.empty else 0,
@@ -350,10 +379,14 @@ def build_combo(df, report_date, filter_nv=None):
 
 
 # ====================== GIAO DIỆN ======================
-st.markdown("""
+# Header với Logo
+st.markdown(f"""
 <div class="main-header">
-    <h1>SƯ ĐOÀN HCM4 - TRUNG ĐOÀN 10</h1>
-    <h2>TRACKING KPI ĐDKD - TEAM SS TRƯƠNG THANH TÂN TOTAL</h2>
+    <div class="logo">{logo_svg}</div>
+    <div class="title-block">
+        <h1>SƯ ĐOÀN HCM4 - TRUNG ĐOÀN 10</h1>
+        <h2>TRACKING KPI ĐDKD - TEAM SS TRƯƠNG THANH TÂN TOTAL</h2>
+    </div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -369,13 +402,16 @@ with st.spinner("Đang tải dữ liệu từ GitHub..."):
 
 nv_list = ["Tất cả ĐDKD"] + sorted(df['Tên NVBH'].dropna().unique().tolist())
 
-# ========== FILTER BAR (chung cho KPI) ==========
+# ========== FILTER BAR ==========
 f1, f2, f3, f4, f5 = st.columns([1.1, 1.2, 2.3, 1.4, 1.5])
 with f1:
-    st.selectbox("MONTH", ["Tháng 09/2026"], key="month")
+    st.markdown('<p class="filter-label">MONTH</p>', unsafe_allow_html=True)
+    st.selectbox("", ["Tháng 09/2026"], key="month", label_visibility="collapsed")
 with f2:
-    report_date = st.date_input("NGÀY", value=date(2026, 9, 16), key="ngay")
+    st.markdown('<p class="filter-label">NGÀY</p>', unsafe_allow_html=True)
+    report_date = st.date_input("", value=date(2026, 9, 16), key="ngay", label_visibility="collapsed")
 with f3:
+    st.markdown('<p class="filter-label">KPI NAME</p>', unsafe_allow_html=True)
     kpi_map = {
         "1. ASO FOCUS TOTAL NHÃN CHANTÉ": "CHANTE",
         "2. ASO FOCUS TRẬN VÀNG - OMACHI TRỘN": "OMACHI",
@@ -384,12 +420,14 @@ with f3:
         "5. ASO ALL KÊNH OFF": "ASO_ALL",
         "6. BÁO CÁO ĐƠN HÀNG COMBO": "COMBO",
     }
-    selected_name = st.selectbox("KPI NAME", list(kpi_map.keys()), key="kpi")
+    selected_name = st.selectbox("", list(kpi_map.keys()), key="kpi", label_visibility="collapsed")
     selected_kpi = kpi_map[selected_name]
 with f4:
-    st.selectbox("SALE SUP", ["Trương Thanh Tân Total"], key="sup")
+    st.markdown('<p class="filter-label">SALE SUP</p>', unsafe_allow_html=True)
+    st.selectbox("", ["Trương Thanh Tân Total"], key="sup", label_visibility="collapsed")
 with f5:
-    filter_nv = st.selectbox("ĐDKD (Nhân viên)", nv_list, key="ddkd")
+    st.markdown('<p class="filter-label">ĐDKD (Nhân viên)</p>', unsafe_allow_html=True)
+    filter_nv = st.selectbox("", nv_list, key="ddkd", label_visibility="collapsed")
 
 st.markdown("---")
 
@@ -419,10 +457,7 @@ with tab_kpi:
         c3.metric("📊 % MTD", pct_team)
         c4.metric("🆕 Phát sinh Ngày", f"+{total_ngay}")
 
-        st.dataframe(
-            df_r.style.map(color_pct, subset=['% MTD']),
-            use_container_width=True, hide_index=True, height=500
-        )
+        st.dataframe(df_r.style.map(color_pct, subset=['% MTD']), use_container_width=True, hide_index=True, height=500)
 
         top3 = df_r.iloc[:-1].head(3)
         top3_text = ", ".join([f"{r['Tên NVBH']} ({r['MTD']})" for _, r in top3.iterrows()])
@@ -449,60 +484,50 @@ with tab_kpi:
         c4.metric("Ngày ON", f"+{ngay_on}")
         st.dataframe(df_combo, use_container_width=True, hide_index=True, height=500)
 
-# ----- TAB MCP VISIT -----
+# ----- TAB MCP -----
 with tab_mcp:
     st.subheader("🗺️ MCP VISIT & MAPPING DOANH SỐ BÁN HÀNG")
-
     if mcp.empty:
         st.warning("Chưa có dữ liệu MCP")
     else:
         col_nv  = find_col(mcp, ['SM name', 'SM Name', 'Tên NVBH', 'Nhân viên', 'Sale name', 'Position name'])
-        col_ma  = find_col(mcp, ['Outlet_code', 'Outlet Code', 'Mã CH', 'Mã khách hàng', 'Poscode', 'Ship to'])
-        col_ten = find_col(mcp, ['Outlet_name', 'Outlet Name', 'Tên CH', 'Tên khách hàng', 'Customer name'])
-        col_thu = find_col(mcp, ['Thứ', 'Frequency', 'Tần suất', 'Visit day', 'Ngày ghé'])
+        col_ma  = find_col(mcp, ['Outlet_code', 'Outlet Code', 'Mã CH', 'Mã khách hàng', 'Poscode'])
+        col_ten = find_col(mcp, ['Outlet_name', 'Outlet Name', 'Tên CH', 'Tên khách hàng'])
+        col_thu = find_col(mcp, ['Thứ', 'Frequency', 'Tần suất'])
 
         c1, c2, c3, c4 = st.columns(4)
         with c1:
-            nv_opts = ["Tất cả ĐDKD"]
-            if col_nv:
-                nv_opts += sorted(mcp[col_nv].dropna().astype(str).unique().tolist())
-            f_nv = st.selectbox("👤 Lọc Nhân Viên (ĐDKD)", nv_opts, key="mcp_nv")
+            st.markdown('<p class="filter-label">👤 Lọc Nhân Viên (ĐDKD)</p>', unsafe_allow_html=True)
+            nv_opts = ["Tất cả ĐDKD"] + (sorted(mcp[col_nv].dropna().astype(str).unique().tolist()) if col_nv else [])
+            f_nv = st.selectbox("", nv_opts, key="mcp_nv", label_visibility="collapsed")
         with c2:
-            f_ma = st.text_input("🆔 Lọc Mã Khách Hàng", key="mcp_ma")
+            st.markdown('<p class="filter-label">🆔 Lọc Mã Khách Hàng</p>', unsafe_allow_html=True)
+            f_ma = st.text_input("", key="mcp_ma", label_visibility="collapsed")
         with c3:
-            f_ten = st.text_input("🏪 Lọc Tên Khách Hàng", key="mcp_ten")
+            st.markdown('<p class="filter-label">🏪 Lọc Tên Khách Hàng</p>', unsafe_allow_html=True)
+            f_ten = st.text_input("", key="mcp_ten", label_visibility="collapsed")
         with c4:
-            thu_opts = ["Tất cả các thứ", "2", "3", "4", "5", "6", "7", "25", "36", "47"]
-            f_thu = st.selectbox("📅 Lọc Theo Thứ", thu_opts, key="mcp_thu")
+            st.markdown('<p class="filter-label">📅 Lọc Theo Thứ</p>', unsafe_allow_html=True)
+            f_thu = st.selectbox("", ["Tất cả các thứ", "2", "3", "4", "5", "6", "7", "25", "36", "47"], key="mcp_thu", label_visibility="collapsed")
 
-        # Apply filter
         df_f = mcp.copy()
-
         if f_nv != "Tất cả ĐDKD" and col_nv:
             df_f = df_f[df_f[col_nv].astype(str) == f_nv]
-
         if f_ma and col_ma:
             df_f = df_f[df_f[col_ma].astype(str).str.contains(f_ma, case=False, na=False)]
-
         if f_ten and col_ten:
             df_f = df_f[df_f[col_ten].astype(str).str.contains(f_ten, case=False, na=False)]
-
-        # ===== SỬA LỌC THỨ =====
         if f_thu != "Tất cả các thứ" and col_thu:
-            # Chuyển cột Thứ về string để so sánh
             thu_series = df_f[col_thu].astype(str).str.strip()
-
-            if f_thu in ["2", "3", "4", "5", "6", "7"]:
-                # Lọc chính xác thứ đơn (hoặc chứa số đó)
+            if f_thu in ["2","3","4","5","6","7"]:
                 df_f = df_f[thu_series == f_thu]
             elif f_thu == "25":
-                df_f = df_f[thu_series.isin(["2", "5", "25"])]
+                df_f = df_f[thu_series.isin(["2","5","25"])]
             elif f_thu == "36":
-                df_f = df_f[thu_series.isin(["3", "6", "36"])]
+                df_f = df_f[thu_series.isin(["3","6","36"])]
             elif f_thu == "47":
-                df_f = df_f[thu_series.isin(["4", "7", "47"])]
+                df_f = df_f[thu_series.isin(["4","7","47"])]
 
-        # Format cột 3M sales + các cột doanh số
         for col in df_f.columns:
             col_lower = col.lower().replace(" ", "")
             if any(x in col_lower for x in ["3msales", "3m sales", "doanh số", "doanhso", "sales"]):
@@ -514,35 +539,30 @@ with tab_mcp:
 # ----- TAB CAT -----
 with tab_cat:
     st.subheader("🎯 TRACKING MBS - THEO NGÀNH HÀNG (CATEGORY)")
-
     if df_cat.empty:
         st.error("❌ Không tìm thấy file Data_Cat.xlsx")
-        st.code(f"Đường dẫn: {CAT_PATH}")
     else:
         st.success(f"✅ Đã load Data_Cat.xlsx – {len(df_cat):,} dòng")
-
-        col_nv = find_col(df_cat, ['SM Name', 'SM name', 'Tên NVBH', 'Nhân viên', 'Sale name'])
-        col_ma = find_col(df_cat, ['Outlet Code', 'Outlet_code', 'Mã CH', 'Mã khách hàng', 'Poscode'])
+        col_nv = find_col(df_cat, ['SM Name', 'SM name', 'Tên NVBH', 'Nhân viên'])
+        col_ma = find_col(df_cat, ['Outlet Code', 'Outlet_code', 'Mã CH', 'Mã khách hàng'])
         col_ten = find_col(df_cat, ['Outlet Name', 'Outlet_name', 'Tên CH', 'Tên khách hàng'])
 
         c1, c2, c3 = st.columns(3)
         with c1:
-            nv_opts = ["Tất cả ĐDKD"]
-            if col_nv:
-                nv_opts += sorted(df_cat[col_nv].dropna().astype(str).unique().tolist())
-            f_nv = st.selectbox("👤 Lọc Nhân Viên (ĐDKD)", nv_opts, key="cat_nv")
+            st.markdown('<p class="filter-label">👤 Lọc Nhân Viên (ĐDKD)</p>', unsafe_allow_html=True)
+            nv_opts = ["Tất cả ĐDKD"] + (sorted(df_cat[col_nv].dropna().astype(str).unique().tolist()) if col_nv else [])
+            f_nv = st.selectbox("", nv_opts, key="cat_nv", label_visibility="collapsed")
         with c2:
-            f_ma = st.text_input("🆔 Lọc Mã Khách Hàng", key="cat_ma")
+            st.markdown('<p class="filter-label">🆔 Lọc Mã Khách Hàng</p>', unsafe_allow_html=True)
+            f_ma = st.text_input("", key="cat_ma", label_visibility="collapsed")
         with c3:
-            f_ten = st.text_input("🏪 Lọc Tên Khách Hàng", key="cat_ten")
+            st.markdown('<p class="filter-label">🏪 Lọc Tên Khách Hàng</p>', unsafe_allow_html=True)
+            f_ten = st.text_input("", key="cat_ten", label_visibility="collapsed")
 
         df_f = df_cat.copy()
-        if f_nv != "Tất cả ĐDKD" and col_nv:
-            df_f = df_f[df_f[col_nv].astype(str) == f_nv]
-        if f_ma and col_ma:
-            df_f = df_f[df_f[col_ma].astype(str).str.contains(f_ma, case=False, na=False)]
-        if f_ten and col_ten:
-            df_f = df_f[df_f[col_ten].astype(str).str.contains(f_ten, case=False, na=False)]
+        if f_nv != "Tất cả ĐDKD" and col_nv: df_f = df_f[df_f[col_nv].astype(str) == f_nv]
+        if f_ma and col_ma: df_f = df_f[df_f[col_ma].astype(str).str.contains(f_ma, case=False, na=False)]
+        if f_ten and col_ten: df_f = df_f[df_f[col_ten].astype(str).str.contains(f_ten, case=False, na=False)]
 
         for col in df_f.columns:
             if "doanh số" in col.lower() or "doanhso" in col.lower().replace(" ", ""):
@@ -554,35 +574,30 @@ with tab_cat:
 # ----- TAB BRAND -----
 with tab_brand:
     st.subheader("🏷️ TRACKING MBS - THEO THƯƠNG HIỆU (BRAND)")
-
     if df_brand.empty:
         st.error("❌ Không tìm thấy file Data_Brand.xlsx")
-        st.code(f"Đường dẫn: {BRAND_PATH}")
     else:
         st.success(f"✅ Đã load Data_Brand.xlsx – {len(df_brand):,} dòng")
-
-        col_nv = find_col(df_brand, ['SM Name', 'SM name', 'Tên NVBH', 'Nhân viên', 'Sale name'])
-        col_ma = find_col(df_brand, ['Outlet Code', 'Outlet_code', 'Mã CH', 'Mã khách hàng', 'Poscode'])
+        col_nv = find_col(df_brand, ['SM Name', 'SM name', 'Tên NVBH', 'Nhân viên'])
+        col_ma = find_col(df_brand, ['Outlet Code', 'Outlet_code', 'Mã CH', 'Mã khách hàng'])
         col_ten = find_col(df_brand, ['Outlet Name', 'Outlet_name', 'Tên CH', 'Tên khách hàng'])
 
         c1, c2, c3 = st.columns(3)
         with c1:
-            nv_opts = ["Tất cả ĐDKD"]
-            if col_nv:
-                nv_opts += sorted(df_brand[col_nv].dropna().astype(str).unique().tolist())
-            f_nv = st.selectbox("👤 Lọc Nhân Viên (ĐDKD)", nv_opts, key="brand_nv")
+            st.markdown('<p class="filter-label">👤 Lọc Nhân Viên (ĐDKD)</p>', unsafe_allow_html=True)
+            nv_opts = ["Tất cả ĐDKD"] + (sorted(df_brand[col_nv].dropna().astype(str).unique().tolist()) if col_nv else [])
+            f_nv = st.selectbox("", nv_opts, key="brand_nv", label_visibility="collapsed")
         with c2:
-            f_ma = st.text_input("🆔 Lọc Mã Khách Hàng", key="brand_ma")
+            st.markdown('<p class="filter-label">🆔 Lọc Mã Khách Hàng</p>', unsafe_allow_html=True)
+            f_ma = st.text_input("", key="brand_ma", label_visibility="collapsed")
         with c3:
-            f_ten = st.text_input("🏪 Lọc Tên Khách Hàng", key="brand_ten")
+            st.markdown('<p class="filter-label">🏪 Lọc Tên Khách Hàng</p>', unsafe_allow_html=True)
+            f_ten = st.text_input("", key="brand_ten", label_visibility="collapsed")
 
         df_f = df_brand.copy()
-        if f_nv != "Tất cả ĐDKD" and col_nv:
-            df_f = df_f[df_f[col_nv].astype(str) == f_nv]
-        if f_ma and col_ma:
-            df_f = df_f[df_f[col_ma].astype(str).str.contains(f_ma, case=False, na=False)]
-        if f_ten and col_ten:
-            df_f = df_f[df_f[col_ten].astype(str).str.contains(f_ten, case=False, na=False)]
+        if f_nv != "Tất cả ĐDKD" and col_nv: df_f = df_f[df_f[col_nv].astype(str) == f_nv]
+        if f_ma and col_ma: df_f = df_f[df_f[col_ma].astype(str).str.contains(f_ma, case=False, na=False)]
+        if f_ten and col_ten: df_f = df_f[df_f[col_ten].astype(str).str.contains(f_ten, case=False, na=False)]
 
         for col in df_f.columns:
             if "doanh số" in col.lower() or "doanhso" in col.lower().replace(" ", ""):
