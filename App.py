@@ -297,7 +297,7 @@ def build_report(df, report_date, targets, report_type, filter_nv=None):
     total_pct = round(total_mtd/team_tgt*100, 1) if team_tgt else 0
 
     total_row = pd.DataFrame([{'STT':'-', 'Mã NVBH':'TỔNG CỘNG',
-        'Tên NVBH':'SS Trương Thanh Tân Total' if filter_nv=="Tất cả ĐDKD" else filter_nv,
+        'Tên NVBH':'SS Nguyễn Thị Tường Vy Total' if filter_nv=="Tất cả ĐDKD" else filter_nv,
         'Chỉ Tiêu KPI': team_tgt,
         'Thực Hiện Ngày':total_ngay, 'MTD':total_mtd, '% MTD':f"{total_pct}%"}])
     return pd.concat([df_out, total_row], ignore_index=True), team_tgt, title
@@ -341,7 +341,7 @@ def build_combo(df, report_date, filter_nv=None):
     df_out = pd.DataFrame(rows).sort_values('MTD (OFF)', ascending=False).reset_index(drop=True)
     df_out.insert(0, 'STT', range(1, len(df_out)+1))
     total_row = pd.DataFrame([{'STT':'-', 'Mã NVBH':'TỔNG CỘNG',
-        'Tên NVBH':'SS Trương Thanh Tân Total' if filter_nv=="Tất cả ĐDKD" else filter_nv,
+        'Tên NVBH':'SS Nguyễn Thị Tường Vy Total' if filter_nv=="Tất cả ĐDKD" else filter_nv,
         'Phát sinh Ngày (OFF)':int(df_out['Phát sinh Ngày (OFF)'].sum()) if not df_out.empty else 0,
         'MTD (OFF)':int(df_out['MTD (OFF)'].sum()) if not df_out.empty else 0,
         'Phát sinh Ngày (ON)':int(df_out['Phát sinh Ngày (ON)'].sum()) if not df_out.empty else 0,
@@ -434,7 +434,7 @@ with f3:
 f4, f5 = st.columns([1, 1])
 with f4:
     st.markdown('<p class="filter-label">SALE SUP</p>', unsafe_allow_html=True)
-    st.selectbox("", ["Trương Thanh Tân Total"], key="sup", label_visibility="collapsed")
+    st.selectbox("", ["Nguyễn Thị Tường Vy Total"], key="sup", label_visibility="collapsed")
 with f5:
     st.markdown('<p class="filter-label">ĐDKD (Nhân viên)</p>', unsafe_allow_html=True)
     filter_nv = st.selectbox("", nv_list, key="ddkd", label_visibility="collapsed")
