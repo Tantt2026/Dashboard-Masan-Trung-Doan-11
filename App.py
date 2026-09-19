@@ -136,6 +136,23 @@ def render_metric_card(label, value):
     </div>
     """, unsafe_allow_html=True)
 
+def clean_dataframe_columns(df):
+    if df.empty: return df
+    new_cols = []
+    seen = {}
+    for c in df.columns:
+        c_str = str(c).strip()
+        if not c_str or c_str.lower().startswith("unnamed"):
+            c_str = "Col"
+        if c_str in seen:
+            seen[c_str] += 1
+            c_str = f"{c_str}_{seen[c_str]}"
+        else:
+            seen[c_str] = 0
+        new_cols.append(c_str)
+    df.columns = new_cols
+    return df
+
 # ====================== ĐƯỜNG DẪN ======================
 DATA_DIR = "data"
 RPT_PATH   = os.path.join(DATA_DIR, "RPT_061.xlsx")
@@ -144,10 +161,10 @@ KPI_PATH   = os.path.join(DATA_DIR, "Target_KPI.xlsx")
 CAT_PATH   = os.path.join(DATA_DIR, "Data_Cat.xlsx")
 BRAND_PATH = os.path.join(DATA_DIR, "Data_Brand.xlsx")
 
-combo_off_files = [f for f in os.listdir(DATA_DIR) if "Combo" in f and "OFF" in f]
-combo_on_files  = [f for f in os.listdir(DATA_DIR) if "Combo" in f and "On" in f]
-COMBO_OFF_PATH = os.path.join(DATA_DIR, combo_off_files[0]) if combo_off_files else os.path.join(DATA_DIR, "Tân_Combo Kênh OFF.xlsx")
-COMBO_ON_PATH  = os.path.join(DATA_DIR, combo_on_files[0]) if combo_on_files else os.path.join(DATA_DIR, "Tân_Combo Kênh On.xlsx")
+combo_off_files = [f for f in os.listdir(DATA_DIR) if "Combo" in f and ("OFF" in f or "Off" in f or "off" in f)]
+combo_on_files  = [f for f in os.listdir(DATA_DIR) if "Combo" in f and ("On" in f or "ON" in f or "on" in f)]
+COMBO_OFF_PATH = os.path.join(DATA_DIR, combo_off_files[0]) if combo_off_files else os.path.join(DATA_DIR, "Vy_Combo Kênh OFF.xlsx")
+COMBO_ON_PATH  = os.path.join(DATA_DIR, combo_on_files[0]) if combo_on_files else os.path.join(DATA_DIR, "Vy_Combo Kênh ON.xlsx")
 
 # ====================== LOAD ======================
 @st.cache_data(ttl=600)
@@ -157,6 +174,8 @@ def load_main_data():
         st.stop()
     df = pd.read_excel(RPT_PATH)
     mcp = pd.read_excel(MCP_PATH)
+    df = clean_dataframe_columns(df)
+    mcp = clean_dataframe_columns(mcp)
     df = df[df['Tình trạng đơn hàng'] != 'Đã hủy'].copy()
     df['Ngày tạo đơn hàng'] = pd.to_datetime(df['Ngày tạo đơn hàng'], format='%d/%m/%Y %H:%M:%S', errors='coerce')
     df['date'] = df['Ngày tạo đơn hàng'].dt.date
@@ -176,6 +195,7 @@ def load_combo_data():
             new_cols = raw_off.iloc[0].values
             df_off = raw_off.iloc[1:].copy()
             df_off.columns = [str(c) if pd.notna(c) else f"Col_{i}" for i, c in enumerate(new_cols)]
+            df_off = clean_dataframe_columns(df_off)
     except Exception as e:
         print("Error loading Combo OFF:", e)
         
@@ -185,6 +205,7 @@ def load_combo_data():
             new_cols = raw_on.iloc[0].values
             df_on = raw_on.iloc[1:].copy()
             df_on.columns = [str(c) if pd.notna(c) else f"Col_{i}" for i, c in enumerate(new_cols)]
+            df_on = clean_dataframe_columns(df_on)
     except Exception as e:
         print("Error loading Combo ON:", e)
         
@@ -195,7 +216,9 @@ def load_cat_data():
     for name in ["Data_Cat.xlsx", "data_cat.xlsx"]:
         path = os.path.join(DATA_DIR, name) if os.path.exists(os.path.join(DATA_DIR, name)) else name
         if os.path.exists(path):
-            try: return pd.read_excel(path)
+            try:
+                df = pd.read_excel(path)
+                return clean_dataframe_columns(df)
             except: pass
     return pd.DataFrame()
 
@@ -204,7 +227,9 @@ def load_brand_data():
     for name in ["Data_Brand.xlsx", "data_brand.xlsx"]:
         path = os.path.join(DATA_DIR, name) if os.path.exists(os.path.join(DATA_DIR, name)) else name
         if os.path.exists(path):
-            try: return pd.read_excel(path)
+            try:
+                df = pd.read_excel(path)
+                return clean_dataframe_columns(df)
             except: pass
     return pd.DataFrame()
 
@@ -476,15 +501,24 @@ def build_combo_matrix(df, report_date, df_off_master, df_on_master, filter_nv=N
         df_mtd = df_mtd[df_mtd['Tên NVBH'] == filter_nv]
         
     nv_list = sorted(df['Tên NVBH'].dropna().unique().tolist())
-    if not df_off_master.empty and 'Tên NV' in df_off_master.columns:
-        nv_list = sorted(list(set(nv_list + df_off_master['Tên NV'].dropna().unique().tolist())))
+    if not df_off_master.empty:
+        c_nv_off_master = find_col(df_off_master, ['Tên NV', 'SM name', 'Nhân viên'])
+        if c_nv_off_master:
+            nv_list = sorted(list(set(nv_list + df_off_master[c_nv_off_master].dropna().astype(str).tolist())))
 
     off_target_map = {}
     on_target_map = {}
-    if not df_off_master.empty and 'Tên NV' in df_off_master.columns and 'outlet_code' in df_off_master.columns:
-        off_target_map = df_off_master.groupby('Tên NV')['outlet_code'].nunique().to_dict()
-    if not df_on_master.empty and 'Tên NV' in df_on_master.columns and 'outlet_code' in df_on_master.columns:
-        on_target_map = df_on_master.groupby('Tên NV')['outlet_code'].nunique().to_dict()
+    if not df_off_master.empty:
+        c_nv_off_master = find_col(df_off_master, ['Tên NV', 'SM name', 'Nhân viên'])
+        c_ma_off_master = find_col(df_off_master, ['outlet_code', 'Outlet Code', 'Mã CH'])
+        if c_nv_off_master and c_ma_off_master:
+            off_target_map = df_off_master.groupby(c_nv_off_master)[c_ma_off_master].nunique().to_dict()
+
+    if not df_on_master.empty:
+        c_nv_on_master = find_col(df_on_master, ['Tên NV', 'SM name', 'Nhân viên'])
+        c_ma_on_master = find_col(df_on_master, ['outlet_code', 'Outlet Code', 'Mã CH'])
+        if c_nv_on_master and c_ma_on_master:
+            on_target_map = df_on_master.groupby(c_nv_on_master)[c_ma_on_master].nunique().to_dict()
 
     def is_combo_off(row):
         sp = str(row.get('Tên SP lower',''))
@@ -510,15 +544,21 @@ def build_combo_matrix(df, report_date, df_off_master, df_on_master, filter_nv=N
     
     off_mtd = df_off[df_off['is_combo']].groupby('Tên NVBH')['Mã CH'].nunique().to_dict()
     off_c = df_off[df_off['is_combo']]
-    first_off = off_c.groupby(['Tên NVBH','Mã CH'])['date'].min().reset_index()
-    first_off.columns = ['Tên NVBH','Mã CH','first_date']
-    off_ngay = first_off[first_off['first_date']==report_date].groupby('Tên NVBH')['Mã CH'].nunique().to_dict()
+    if not off_c.empty:
+        first_off = off_c.groupby(['Tên NVBH','Mã CH'])['date'].min().reset_index()
+        first_off.columns = ['Tên NVBH','Mã CH','first_date']
+        off_ngay = first_off[first_off['first_date']==report_date].groupby('Tên NVBH')['Mã CH'].nunique().to_dict()
+    else:
+        off_ngay = {}
     
     on_mtd = df_on[df_on['is_combo']].groupby('Tên NVBH')['Mã CH'].nunique().to_dict()
     on_c = df_on[df_on['is_combo']]
-    first_on = on_c.groupby(['Tên NVBH','Mã CH'])['date'].min().reset_index()
-    first_on.columns = ['Tên NVBH','Mã CH','first_date']
-    on_ngay = first_on[first_on['first_date']==report_date].groupby('Tên NVBH')['Mã CH'].nunique().to_dict()
+    if not on_c.empty:
+        first_on = on_c.groupby(['Tên NVBH','Mã CH'])['date'].min().reset_index()
+        first_on.columns = ['Tên NVBH','Mã CH','first_date']
+        on_ngay = first_on[first_on['first_date']==report_date].groupby('Tên NVBH')['Mã CH'].nunique().to_dict()
+    else:
+        on_ngay = {}
     
     rows = []
     for idx, nv in enumerate(nv_list, 1):
@@ -1037,6 +1077,7 @@ with tab_mcp:
             df_f = df_f[formatted_col_ds.isin(f_ds)]
 
         df_f = filter_by_thu_multi(df_f, col_thu, f_thu)
+        df_f = clean_dataframe_columns(df_f)
         for col in df_f.columns:
             if any(x in col.lower().replace(" ","") for x in ["3msales","doanhsố","doanhso","sales","doanhsômtd"]):
                 df_f[col] = pd.to_numeric(df_f[col], errors='coerce').apply(format_number_vn)
@@ -1109,6 +1150,7 @@ with tab_cat:
         if f_ma and col_ma: df_f = df_f[df_f[col_ma].astype(str).str.contains(f_ma, case=False, na=False)]
         if f_ten and col_ten: df_f = df_f[df_f[col_ten].astype(str).str.contains(f_ten, case=False, na=False)]
         df_f = filter_by_thu_multi(df_f, col_thu, f_thu)
+        df_f = clean_dataframe_columns(df_f)
         for col in df_f.columns:
             if "doanh số" in col.lower() or "doanhso" in col.lower().replace(" ",""):
                 df_f[col] = pd.to_numeric(df_f[col], errors='coerce').apply(format_number_vn)
@@ -1181,6 +1223,7 @@ with tab_brand:
         if f_ma and col_ma: df_f = df_f[df_f[col_ma].astype(str).str.contains(f_ma, case=False, na=False)]
         if f_ten and col_ten: df_f = df_f[df_f[col_ten].astype(str).str.contains(f_ten, case=False, na=False)]
         df_f = filter_by_thu_multi(df_f, col_thu, f_thu)
+        df_f = clean_dataframe_columns(df_f)
         for col in df_f.columns:
             if "doanh số" in col.lower() or "doanhso" in col.lower().replace(" ",""):
                 df_f[col] = pd.to_numeric(df_f[col], errors='coerce').apply(format_number_vn)
@@ -1205,7 +1248,7 @@ with tab_brand:
 
 # ----- TAB DSKH_Combo OFF -----
 with tab_dskh_off:
-    st.markdown('<h3 style="color: #034ea2; font-weight: 800; margin-bottom: 0px;">📋 DANH SÁCH KHÁCH HÀNG COMBO OFF (TÂN_COMBO KÊNH OFF)</h3>', unsafe_allow_html=True)
+    st.markdown('<h3 style="color: #034ea2; font-weight: 800; margin-bottom: 0px;">📋 DANH SÁCH KHÁCH HÀNG COMBO OFF (VY_COMBO KÊNH OFF)</h3>', unsafe_allow_html=True)
     if df_combo_off.empty:
         st.warning("Chưa có dữ liệu Combo OFF trong thư mục 'data'")
     else:
@@ -1253,6 +1296,7 @@ with tab_dskh_off:
         if f_off_ma and col_ma_off: df_off_f = df_off_f[df_off_f[col_ma_off].astype(str).str.contains(f_off_ma, case=False, na=False)]
         if f_off_ten and col_ten_off: df_off_f = df_off_f[df_off_f[col_ten_off].astype(str).str.contains(f_off_ten, case=False, na=False)]
         df_off_f = filter_by_thu_multi(df_off_f, col_thu_off, f_off_thu)
+        df_off_f = clean_dataframe_columns(df_off_f)
         
         all_cols_off = df_off_f.columns.tolist()
         saved_off_cols = st.query_params.get("off_cols", None)
@@ -1274,7 +1318,7 @@ with tab_dskh_off:
 
 # ----- TAB DSKH_Combo ON -----
 with tab_dskh_on:
-    st.markdown('<h3 style="color: #034ea2; font-weight: 800; margin-bottom: 0px;">📋 DANH SÁCH KHÁCH HÀNG COMBO ON (TÂN_COMBO KÊNH ON)</h3>', unsafe_allow_html=True)
+    st.markdown('<h3 style="color: #034ea2; font-weight: 800; margin-bottom: 0px;">📋 DANH SÁCH KHÁCH HÀNG COMBO ON (VY_COMBO KÊNH ON)</h3>', unsafe_allow_html=True)
     if df_combo_on.empty:
         st.warning("Chưa có dữ liệu Combo ON trong thư mục 'data'")
     else:
@@ -1322,6 +1366,7 @@ with tab_dskh_on:
         if f_on_ma and col_ma_on: df_on_f = df_on_f[df_on_f[col_ma_on].astype(str).str.contains(f_on_ma, case=False, na=False)]
         if f_on_ten and col_ten_on: df_on_f = df_on_f[df_on_f[col_ten_on].astype(str).str.contains(f_on_ten, case=False, na=False)]
         df_on_f = filter_by_thu_multi(df_on_f, col_thu_on, f_on_thu)
+        df_on_f = clean_dataframe_columns(df_on_f)
         
         all_cols_on = df_on_f.columns.tolist()
         saved_on_cols = st.query_params.get("on_cols", None)
