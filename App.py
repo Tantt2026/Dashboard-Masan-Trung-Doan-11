@@ -80,14 +80,12 @@ st.markdown("""
         .main-header h1 { font-size: 18px; }
         .main-header h2 { font-size: 12px; }
     }
-
     .filter-label {
         font-weight: 700 !important;
         color: #c53030 !important;
         font-size: 12px !important;
         margin-bottom: 2px;
     }
-
     .note-box {
         background: #ebf8ff;
         border-left: 4px solid #3182ce;
@@ -97,7 +95,15 @@ st.markdown("""
         font-size: 13px;
         line-height: 1.5;
     }
-    #MainMenu, footer, header {visibility: hidden;}
+    
+    [data-testid="stPopover"] button {
+        color: #e53e3e !important;
+        font-weight: 900 !important;
+        font-size: 14px !important;
+    }
+    
+    footer {visibility: hidden;}
+    #MainMenu, header {visibility: visible !important;}
     
     .custom-kpi-table {
         width: 100%;
@@ -138,11 +144,16 @@ KPI_PATH   = os.path.join(DATA_DIR, "Target_KPI.xlsx")
 CAT_PATH   = os.path.join(DATA_DIR, "Data_Cat.xlsx")
 BRAND_PATH = os.path.join(DATA_DIR, "Data_Brand.xlsx")
 
+combo_off_files = [f for f in os.listdir(DATA_DIR) if "Combo" in f and "OFF" in f]
+combo_on_files  = [f for f in os.listdir(DATA_DIR) if "Combo" in f and "On" in f]
+COMBO_OFF_PATH = os.path.join(DATA_DIR, combo_off_files[0]) if combo_off_files else os.path.join(DATA_DIR, "Tân_Combo Kênh OFF.xlsx")
+COMBO_ON_PATH  = os.path.join(DATA_DIR, combo_on_files[0]) if combo_on_files else os.path.join(DATA_DIR, "Tân_Combo Kênh On.xlsx")
+
 # ====================== LOAD ======================
 @st.cache_data(ttl=600)
 def load_main_data():
     if not os.path.exists(RPT_PATH) or not os.path.exists(MCP_PATH):
-        st.error("Thiếu file RPT_061.xlsx hoặc Data_MCP.xlsx")
+        st.error(f"Thiếu file RPT_061.xlsx hoặc Data_MCP.xlsx trong thư mục '{DATA_DIR}'")
         st.stop()
     df = pd.read_excel(RPT_PATH)
     mcp = pd.read_excel(MCP_PATH)
@@ -155,6 +166,29 @@ def load_main_data():
     df = df.merge(mcp_map, left_on='Mã CH', right_on='Outlet_code', how='left')
     df['Tên SP lower'] = df['Tên sản phẩm'].astype(str).str.lower()
     return df, mcp
+
+@st.cache_data(ttl=600)
+def load_combo_data():
+    df_off, df_on = pd.DataFrame(), pd.DataFrame()
+    try:
+        if os.path.exists(COMBO_OFF_PATH):
+            raw_off = pd.read_excel(COMBO_OFF_PATH, header=2)
+            new_cols = raw_off.iloc[0].values
+            df_off = raw_off.iloc[1:].copy()
+            df_off.columns = [str(c) if pd.notna(c) else f"Col_{i}" for i, c in enumerate(new_cols)]
+    except Exception as e:
+        print("Error loading Combo OFF:", e)
+        
+    try:
+        if os.path.exists(COMBO_ON_PATH):
+            raw_on = pd.read_excel(COMBO_ON_PATH, header=2)
+            new_cols = raw_on.iloc[0].values
+            df_on = raw_on.iloc[1:].copy()
+            df_on.columns = [str(c) if pd.notna(c) else f"Col_{i}" for i, c in enumerate(new_cols)]
+    except Exception as e:
+        print("Error loading Combo ON:", e)
+        
+    return df_off, df_on
 
 @st.cache_data(ttl=600)
 def load_cat_data():
@@ -222,23 +256,26 @@ def find_col(df, candidates):
         if c.lower() in cols: return cols[c.lower()]
     return None
 
-def filter_by_thu(df, col_thu, f_thu):
-    if f_thu == "Tất cả các thứ" or not col_thu:
+def filter_by_thu_multi(df, col_thu, f_thu_list):
+    if not f_thu_list or not col_thu:
         return df
     thu_s = df[col_thu].astype(str).str.strip()
-    if f_thu in ["2", "3", "4", "5", "6", "7"]:
-        mapping = {"2": ["2", "25"], "3": ["3", "36"], "4": ["4", "47"], "5": ["25", "5"], "6": ["36", "6"], "7": ["47", "7"]}
-        valid_set = mapping.get(f_thu, [f_thu])
-        return df[thu_s.isin(valid_set)]
-    elif f_thu == "25":
-        return df[thu_s.isin(["2", "5", "25"])]
-    elif f_thu == "36":
-        return df[thu_s.isin(["3", "6", "36"])]
-    elif f_thu == "47":
-        return df[thu_s.isin(["4", "7", "47"])]
-    return df[thu_s == f_thu]
+    mask = pd.Series(False, index=df.index)
+    for f_thu in f_thu_list:
+        if f_thu in ["2", "3", "4", "5", "6", "7"]:
+            mapping = {"2": ["2", "25"], "3": ["3", "36"], "4": ["4", "47"], "5": ["25", "5"], "6": ["36", "6"], "7": ["47", "7"]}
+            valid_set = mapping.get(f_thu, [f_thu])
+            mask = mask | thu_s.isin(valid_set)
+        elif f_thu == "25":
+            mask = mask | thu_s.isin(["2", "5", "25"])
+        elif f_thu == "36":
+            mask = mask | thu_s.isin(["3", "6", "36"])
+        elif f_thu == "47":
+            mask = mask | thu_s.isin(["4", "7", "47"])
+        else:
+            mask = mask | (thu_s == f_thu)
+    return df[mask]
 
-# ====================== HÀM XỬ LÝ DOANH SỐ MTD CHO 3 TAB (MCP, CAT, BRAND) ======================
 def process_mcp_sales(df_rpt, df_mcp):
     if df_mcp.empty or df_rpt.empty: return df_mcp
     valid_df = df_rpt[df_rpt['Tình trạng đơn hàng'] != 'Đã hủy'].copy()
@@ -264,36 +301,24 @@ def process_mcp_sales(df_rpt, df_mcp):
 
 def process_cat_sales(df_rpt, df_cat):
     if df_cat.empty or df_rpt.empty: return df_cat
-    
     sub_map = {
-        'Beer': 'Bia',
-        'Coffee': 'Cà phê',
-        'Seasoning': 'Gia vị',
-        'Home Care': 'Hóa Mỹ Phẩm',
-        'Convenience Foods': 'Mì, Lẩu, Phở, Hủ Tiếu',
-        'Refreshment Drinks': 'Nước giải khát',
-        'Nutrition': 'Ngũ cốc',
-        'Processed Meats': 'Xúc xích, Thịt chế biến'
+        'Beer': 'Bia', 'Coffee': 'Cà phê', 'Seasoning': 'Gia vị', 'Home Care': 'Hóa Mỹ Phẩm',
+        'Convenience Foods': 'Mì, Lẩu, Phở, Hủ Tiếu', 'Refreshment Drinks': 'Nước giải khát',
+        'Nutrition': 'Ngũ cốc', 'Processed Meats': 'Xúc xích, Thịt chế biến'
     }
-    
     df_clean = df_rpt.copy()
     sub_div_col = find_col(df_clean, ['Sub Division', 'SubDivision', 'Phân nhóm'])
     val_col = find_col(df_clean, ['Tổng tiền', 'Giá trị sau CK']) or 'Tổng tiền'
     status_col = find_col(df_clean, ['Tình trạng đơn hàng', 'Trạng thái'])
     
-    if sub_div_col:
-        df_clean['Mapped_Cat'] = df_clean[sub_div_col].map(sub_map).fillna(df_clean[sub_div_col])
-    else:
-        df_clean['Mapped_Cat'] = 'Khác'
-        
+    if sub_div_col: df_clean['Mapped_Cat'] = df_clean[sub_div_col].map(sub_map).fillna(df_clean[sub_div_col])
+    else: df_clean['Mapped_Cat'] = 'Khác'
     df_clean['Mã CH_str'] = df_clean['Mã CH'].astype(str).str.strip()
     
-    # Doanh số thực đạt của CAT (Loại trừ đơn hàng 'Đã hủy')[cite: 1]
     df_valid = df_clean[df_clean[status_col] != 'Đã hủy'] if status_col else df_clean
     agg_cat1 = df_valid.groupby(['Mã CH_str', 'Mapped_Cat'])[val_col].sum().reset_index()
     agg_cat1.columns = ['Outlet_key', 'Cat_Key', 'Val1']
     
-    # Doanh số thực đạt của CAT (Not Cancel/Pending - Chỉ lấy đơn 'Đã đóng')[cite: 1]
     df_closed = df_clean[df_clean[status_col] == 'Đã đóng'] if status_col else df_clean
     agg_cat2 = df_closed.groupby(['Mã CH_str', 'Mapped_Cat'])[val_col].sum().reset_index()
     agg_cat2.columns = ['Outlet_key', 'Cat_Key', 'Val2']
@@ -305,13 +330,11 @@ def process_cat_sales(df_rpt, df_cat):
     col_val2 = find_col(df_out, ['Doanh số thực đạt của CAT(Not Cancel/Pending)', 'Doanh số thực đạt của CAT (Not Cancel/Pending)'])
     
     if not c_code or not c_cat: return df_out
-    
     df_out['_outlet_key'] = df_out[c_code].astype(str).str.strip()
     df_out['_cat_key'] = df_out[c_cat].astype(str).str.strip()
     
     df_out = df_out.merge(agg_cat1, left_on=['_outlet_key', '_cat_key'], right_on=['Outlet_key', 'Cat_Key'], how='left')
     if 'Outlet_key' in df_out.columns: df_out = df_out.drop(columns=['Outlet_key', 'Cat_Key'])
-    
     df_out = df_out.merge(agg_cat2, left_on=['_outlet_key', '_cat_key'], right_on=['Outlet_key', 'Cat_Key'], how='left')
     if 'Outlet_key' in df_out.columns: df_out = df_out.drop(columns=['Outlet_key', 'Cat_Key'])
     
@@ -323,13 +346,11 @@ def process_cat_sales(df_rpt, df_cat):
 
 def process_brand_sales(df_rpt, df_brand):
     if df_brand.empty or df_rpt.empty: return df_brand
-    
     brands_list = [
         "B'fast", "Bupnon TEA365", "Compact", "Chanté", "Chinsu", "Chinsu Story",
         "Heo Cao Bồi", "Homey", "Joins", "Kokomi", "Nam Ngư", "NET", "Omachi",
         "Ponnie", "Red Ruby", "Sachi", "SS", "Sunlight", "VGF", "Vinacafé", "Wake-up 247"
     ]
-    
     def match_brand(sku_str):
         if pd.isna(sku_str): return "Khác"
         s = str(sku_str).lower()
@@ -345,12 +366,10 @@ def process_brand_sales(df_rpt, df_brand):
     df_clean['Mapped_Brand'] = df_clean[sku_col].apply(match_brand)
     df_clean['Mã CH_str'] = df_clean['Mã CH'].astype(str).str.strip()
     
-    # Doanh số thực đạt của brand (Loại trừ đơn hàng 'Đã hủy')[cite: 1]
     df_valid = df_clean[df_clean[status_col] != 'Đã hủy'] if status_col else df_clean
     agg_b1 = df_valid.groupby(['Mã CH_str', 'Mapped_Brand'])[val_col].sum().reset_index()
     agg_b1.columns = ['Outlet_key', 'Brand_Key', 'Val1']
     
-    # Doanh số thực đạt của brand (Not Cancel/Pending - Chỉ lấy đơn 'Đã đóng')[cite: 1]
     df_closed = df_clean[df_clean[status_col] == 'Đã đóng'] if status_col else df_clean
     agg_b2 = df_closed.groupby(['Mã CH_str', 'Mapped_Brand'])[val_col].sum().reset_index()
     agg_b2.columns = ['Outlet_key', 'Brand_Key', 'Val2']
@@ -359,16 +378,14 @@ def process_brand_sales(df_rpt, df_brand):
     c_code = find_col(df_out, ['Outlet Code', 'Outlet_code', 'Mã CH'])
     c_brand = find_col(df_out, ['Danh sách full brand', 'Brand', 'Brands'])
     col_val1 = find_col(df_out, ['Doanh số thực đạt của brand', 'Doanh số thực đạt brand'])
-    col_val2 = find_col(df_out, ['Doanh số thực đạt của brand (Not Cancel/Pending)', 'Doanh số thực đạt của brand(Not Cancel/Pending)'])
+    col_val2 = find_col(df_out, ['Doanh số thực đạt của brand (Not Cancel/Pending)', 'Doanh số thực đạt ของ brand(Not Cancel/Pending)'])
     
     if not c_code or not c_brand: return df_out
-    
     df_out['_outlet_key'] = df_out[c_code].astype(str).str.strip()
     df_out['_brand_key'] = df_out[c_brand].astype(str).str.strip()
     
     df_out = df_out.merge(agg_b1, left_on=['_outlet_key', '_brand_key'], right_on=['Outlet_key', 'Brand_Key'], how='left')
     if 'Outlet_key' in df_out.columns: df_out = df_out.drop(columns=['Outlet_key', 'Brand_Key'])
-    
     df_out = df_out.merge(agg_b2, left_on=['_outlet_key', '_brand_key'], right_on=['Outlet_key', 'Brand_Key'], how='left')
     if 'Outlet_key' in df_out.columns: df_out = df_out.drop(columns=['Outlet_key', 'Brand_Key'])
     
@@ -378,14 +395,12 @@ def process_brand_sales(df_rpt, df_brand):
     drop_cols = [c for c in ['_outlet_key', '_brand_key', 'Val1', 'Val2'] if c in df_out.columns]
     return df_out.drop(columns=drop_cols)
 
-# ====================== KPI LOGIC CHUẨN ======================
 def build_report(df, report_date, targets, report_type, filter_nv=None):
     df_mtd = df[df['date'] >= date(report_date.year, report_date.month, 1)].copy()
     if filter_nv and filter_nv != "Tất cả ĐDKD":
         df_mtd = df_mtd[df_mtd['Tên NVBH'] == filter_nv]
     sm_names = df_mtd.groupby('Mã NVBH')['Tên NVBH'].first().to_dict()
     all_sms = sorted(sm_names.keys())
-
     if report_type == 'ASO_ALL':
         off = df_mtd[df_mtd['L1']=='Kênh Off Premise'].copy()
         mtd = off.groupby('Mã NVBH')['Mã CH'].nunique()
@@ -393,7 +408,6 @@ def build_report(df, report_date, targets, report_type, filter_nv=None):
         first.columns = ['Mã NVBH','Mã CH','first_date']
         ngay = first[first['first_date']==report_date].groupby('Mã NVBH')['Mã CH'].nunique()
         key, title = 'ASO_ALL', "5. ASO ALL KÊNH OFF"
-
     elif report_type == 'PC_BT':
         off = df_mtd[(df_mtd['L1']=='Kênh Off Premise') & ~df_mtd['Sub Division'].astype(str).str.contains('Beer|Bia', case=False, na=False)]
         lines = off.groupby(['Mã NVBH','Mã đơn hàng'])['Mã sản phẩm'].nunique()
@@ -404,7 +418,6 @@ def build_report(df, report_date, targets, report_type, filter_nv=None):
         lines_t = off_t.groupby(['Mã NVBH','Mã đơn hàng'])['Mã sản phẩm'].nunique()
         ngay = lines_t[lines_t>=4].reset_index().groupby('Mã NVBH')['Mã đơn hàng'].nunique()
         key, title = 'PC_BT', "4. PC BT KÊNH OFF (ĐƠN ≥ 4 LINE - LOẠI BEER)"
-
     elif report_type == 'ASO_TEA':
         on = df_mtd[df_mtd['L1']=='Kênh On Premise']
         tea = on[on['Tên SP lower'].str.contains('tea|trà|ô long|olong|búp non', na=False)].copy()
@@ -417,7 +430,6 @@ def build_report(df, report_date, targets, report_type, filter_nv=None):
         tea_t = on_t[on_t['Tên SP lower'].str.contains('tea|trà|ô long|olong|búp non', na=False)]
         ngay = tea_t.groupby('Mã NVBH')['Mã CH'].nunique()
         key, title = 'ASO_ON', "3. ASO TEA KÊNH ON PREMISE"
-
     elif report_type == 'OMACHI':
         mask = df_mtd['Tên SP lower'].str.contains('omachi', na=False) & df_mtd['Tên SP lower'].str.contains('trộn|tron|xào|xao', na=False)
         mtd = df_mtd[mask].groupby('Mã NVBH')['Mã CH'].nunique()
@@ -425,7 +437,6 @@ def build_report(df, report_date, targets, report_type, filter_nv=None):
         first.columns = ['Mã NVBH','Mã CH','first_date']
         ngay = first[first['first_date']==report_date].groupby('Mã NVBH')['Mã CH'].nunique()
         key, title = 'ASO_OMACHI', "2. ASO FOCUS TRẬN VÀNG - OMACHI TRỘN"
-
     elif report_type == 'CHANTE':
         mask = df_mtd['Tên SP lower'].str.contains('chanté|chante', na=False)
         mtd = df_mtd[mask].groupby('Mã NVBH')['Mã CH'].nunique()
@@ -435,7 +446,6 @@ def build_report(df, report_date, targets, report_type, filter_nv=None):
         key, title = 'ASO_CHANTE', "1. ASO FOCUS TOTAL NHÃN CHANTÉ"
     else:
         return pd.DataFrame(), 0, ""
-
     results = []
     for sm in all_sms:
         tgt = targets.get(sm, {}).get(key, 0)
@@ -443,66 +453,272 @@ def build_report(df, report_date, targets, report_type, filter_nv=None):
         n = int(ngay.get(sm, 0))
         pct = round(m/tgt*100, 1) if tgt else 0
         results.append({'Mã NVBH':sm, 'Tên NVBH':sm_names.get(sm,''), 'Chỉ Tiêu KPI':tgt, 'Thực Hiện Ngày':n, 'MTD':m, '% MTD':f"{pct}%", '_ratio': (m/tgt if tgt else 0)})
-
     df_out = pd.DataFrame(results).sort_values('_ratio', ascending=True).drop(columns=['_ratio']).reset_index(drop=True)
     df_out.insert(0, 'STT', range(1, len(df_out)+1))
-
     total_ngay = int(df_out['Thực Hiện Ngày'].sum()) if not df_out.empty else 0
     total_mtd = int(df_out['MTD'].sum()) if not df_out.empty else 0
     team_tgt = int(df_out['Chỉ Tiêu KPI'].sum()) if not df_out.empty else 0
     total_pct = round(total_mtd/team_tgt*100, 1) if team_tgt else 0
-
-    total_row = pd.DataFrame([{'STT':'-', 'Mã NVBH':'TỔNG CỘNG',
-        'Tên NVBH':'SS Nguyễn Thị Tường Vy Total' if filter_nv=="Tất cả ĐDKD" else filter_nv,
+    total_row = pd.DataFrame([{
+        'STT': '-',
+        'Mã NVBH': 'TỔNG CỘNG',
+        'Tên NVBH': 'SS Nguyễn Thị Tường Vy Total' if filter_nv == "Tất cả ĐDKD" else filter_nv,
         'Chỉ Tiêu KPI': team_tgt,
-        'Thực Hiện Ngày':total_ngay, 'MTD':total_mtd, '% MTD':f"{total_pct}%"}])
+        'Thực Hiện Ngày': total_ngay,
+        'MTD': total_mtd,
+        '% MTD': f"{total_pct}%"
+    }])
     return pd.concat([df_out, total_row], ignore_index=True), team_tgt, title
 
-def build_combo(df, report_date, filter_nv=None):
+def build_combo_matrix(df, report_date, df_off_master, df_on_master, filter_nv=None):
     df_mtd = df[df['date'] >= date(report_date.year, report_date.month, 1)].copy()
     if filter_nv and filter_nv != "Tất cả ĐDKD":
         df_mtd = df_mtd[df_mtd['Tên NVBH'] == filter_nv]
-    sm_names = df_mtd.groupby('Mã NVBH')['Tên NVBH'].first().to_dict()
-    all_sms = sorted(sm_names.keys())
+        
+    nv_list = sorted(df['Tên NVBH'].dropna().unique().tolist())
+    if not df_off_master.empty and 'Tên NV' in df_off_master.columns:
+        nv_list = sorted(list(set(nv_list + df_off_master['Tên NV'].dropna().unique().tolist())))
 
-    def is_combo(row):
+    off_target_map = {}
+    on_target_map = {}
+    if not df_off_master.empty and 'Tên NV' in df_off_master.columns and 'outlet_code' in df_off_master.columns:
+        off_target_map = df_off_master.groupby('Tên NV')['outlet_code'].nunique().to_dict()
+    if not df_on_master.empty and 'Tên NV' in df_on_master.columns and 'outlet_code' in df_on_master.columns:
+        on_target_map = df_on_master.groupby('Tên NV')['outlet_code'].nunique().to_dict()
+
+    def is_combo_off(row):
+        sp = str(row.get('Tên SP lower',''))
         km = str(row.get('Hàng KM','N')).upper()=='Y'
         giatri = float(pd.to_numeric(row.get('Giá trị hàng KM',0), errors='coerce') or 0)
         ck = float(pd.to_numeric(row.get('Chiết khấu',0), errors='coerce') or 0)
-        ch = str(row.get('L1',''))
-        if ch=='Kênh Off Premise': return km or giatri>0 or ck>=10000
-        if ch=='Kênh On Premise': return km
-        return False
+        is_olong_dao = ('ô long' in sp or 'olong' in sp) and ('đào' in sp or 'dao' in sp) and km
+        is_hpc_combo = ('chanté' in sp or 'chante' in sp or 'homey' in sp) and (km or giatri>0 or ck>=10000)
+        return is_olong_dao or is_hpc_combo
 
-    df_mtd = df_mtd.copy()
-    df_mtd['is_c'] = df_mtd.apply(is_combo, axis=1)
-    off_mtd = df_mtd[(df_mtd['is_c']) & (df_mtd['L1']=='Kênh Off Premise')].groupby('Mã NVBH')['Mã CH'].nunique()
-    on_mtd  = df_mtd[(df_mtd['is_c']) & (df_mtd['L1']=='Kênh On Premise')].groupby('Mã NVBH')['Mã CH'].nunique()
+    def is_combo_on(row):
+        sp = str(row.get('Tên SP lower',''))
+        km = str(row.get('Hàng KM','N')).upper()=='Y'
+        is_olong_dao = ('ô long' in sp or 'olong' in sp) and ('đào' in sp or 'dao' in sp) and km
+        is_denhi = ('đệ nhị' in sp or 'de nhi' in sp) and km
+        return is_olong_dao or is_denhi
 
-    off_c = df_mtd[(df_mtd['is_c']) & (df_mtd['L1']=='Kênh Off Premise')]
-    first_off = off_c.groupby(['Mã NVBH','Mã CH'])['date'].min().reset_index()
-    first_off.columns = ['Mã NVBH','Mã CH','first_date']
-    off_ngay = first_off[first_off['first_date']==report_date].groupby('Mã NVBH')['Mã CH'].nunique()
+    df_off = df_mtd[df_mtd['L1'] == 'Kênh Off Premise'].copy()
+    df_off['is_combo'] = df_off.apply(is_combo_off, axis=1)
+    
+    df_on = df_mtd[df_mtd['L1'] == 'Kênh On Premise'].copy()
+    df_on['is_combo'] = df_on.apply(is_combo_on, axis=1)
+    
+    off_mtd = df_off[df_off['is_combo']].groupby('Tên NVBH')['Mã CH'].nunique().to_dict()
+    off_c = df_off[df_off['is_combo']]
+    first_off = off_c.groupby(['Tên NVBH','Mã CH'])['date'].min().reset_index()
+    first_off.columns = ['Tên NVBH','Mã CH','first_date']
+    off_ngay = first_off[first_off['first_date']==report_date].groupby('Tên NVBH')['Mã CH'].nunique().to_dict()
+    
+    on_mtd = df_on[df_on['is_combo']].groupby('Tên NVBH')['Mã CH'].nunique().to_dict()
+    on_c = df_on[df_on['is_combo']]
+    first_on = on_c.groupby(['Tên NVBH','Mã CH'])['date'].min().reset_index()
+    first_on.columns = ['Tên NVBH','Mã CH','first_date']
+    on_ngay = first_on[first_on['first_date']==report_date].groupby('Tên NVBH')['Mã CH'].nunique().to_dict()
+    
+    rows = []
+    for idx, nv in enumerate(nv_list, 1):
+        if filter_nv and filter_nv != "Tất cả ĐDKD" and nv != filter_nv: continue
+        tgt_off = int(off_target_map.get(nv, 0))
+        m_off = int(off_mtd.get(nv, 0))
+        n_off = int(off_ngay.get(nv, 0))
+        pct_off = round(m_off / tgt_off * 100, 1) if tgt_off else 0
+        
+        tgt_on = int(on_target_map.get(nv, 0))
+        m_on = int(on_mtd.get(nv, 0))
+        n_on = int(on_ngay.get(nv, 0))
+        pct_on = round(m_on / tgt_on * 100, 1) if tgt_on else 0
+        
+        sub_df = df[df['Tên NVBH'] == nv]
+        ma_nv = sub_df['Mã NVBH'].iloc[0] if not sub_df.empty else ""
+        
+        rows.append({
+            'Mã NVBH': ma_nv,
+            'Tên NVBH': nv,
+            'Target (OFF)': tgt_off,
+            'Phát sinh Ngày (OFF)': n_off,
+            'MTD (OFF)': m_off,
+            '% MTD (OFF)': f"{pct_off}%",
+            '_pct_off_val': (m_off / tgt_off if tgt_off else 0),
+            'Target (ON)': tgt_on,
+            'Phát sinh Ngày (ON)': n_on,
+            'MTD (ON)': m_on,
+            '% MTD (ON)': f"{pct_on}%",
+        })
+        
+    df_out = pd.DataFrame(rows)
+    if not df_out.empty:
+        df_out = df_out.sort_values('_pct_off_val', ascending=True).drop(columns=['_pct_off_val']).reset_index(drop=True)
+        df_out.insert(0, 'STT', range(1, len(df_out)+1))
+        
+    tot_tgt_off = int(sum(off_target_map.values())) if not filter_nv or filter_nv == "Tất cả ĐDKD" else int(sum([off_target_map.get(filter_nv, 0)]))
+    tot_tgt_on = int(sum(on_target_map.values())) if not filter_nv or filter_nv == "Tất cả ĐDKD" else int(sum([on_target_map.get(filter_nv, 0)]))
+    
+    tot_m_off = int(df_out['MTD (OFF)'].sum()) if not df_out.empty else 0
+    tot_n_off = int(df_out['Phát sinh Ngày (OFF)'].sum()) if not df_out.empty else 0
+    tot_pct_off = round(tot_m_off / tot_tgt_off * 100, 1) if tot_tgt_off else 0
+    
+    tot_m_on = int(df_out['MTD (ON)'].sum()) if not df_out.empty else 0
+    tot_n_on = int(df_out['Phát sinh Ngày (ON)'].sum()) if not df_out.empty else 0
+    tot_pct_on = round(tot_m_on / tot_tgt_on * 100, 1) if tot_tgt_on else 0
+    
+    total_row = pd.DataFrame([{
+        'STT': '-',
+        'Mã NVBH': 'TỔNG CỘNG',
+        'Tên NVBH': 'SS Nguyễn Thị Tường Vy Total' if filter_nv == "Tất cả ĐDKD" else filter_nv,
+        'Target (OFF)': tot_tgt_off,
+        'Phát sinh Ngày (OFF)': tot_n_off,
+        'MTD (OFF)': tot_m_off,
+        '% MTD (OFF)': f"{tot_pct_off}%",
+        'Target (ON)': tot_tgt_on,
+        'Phát sinh Ngày (ON)': tot_n_on,
+        'MTD (ON)': tot_m_on,
+        '% MTD (ON)': f"{tot_pct_on}%",
+    }])
+    return pd.concat([df_out, total_row], ignore_index=True), tot_tgt_off, tot_tgt_on
 
-    on_c = df_mtd[(df_mtd['is_c']) & (df_mtd['L1']=='Kênh On Premise')]
-    first_on = on_c.groupby(['Mã NVBH','Mã CH'])['date'].min().reset_index()
-    first_on.columns = ['Mã NVBH','Mã CH','first_date']
-    on_ngay = first_on[first_on['first_date']==report_date].groupby('Mã NVBH')['Mã CH'].nunique()
+def build_summary_report(mcp_df, df_combo_off_raw, df_combo_on_raw, cat_df, brand_df, filter_nv=None, f_thu_list=None):
+    all_nvs = []
+    if not mcp_df.empty:
+        c_nv_mcp = find_col(mcp_df, ['SM Name', 'SM name', 'Tên NVBH', 'Nhân viên'])
+        if c_nv_mcp: all_nvs.extend(mcp_df[c_nv_mcp].dropna().astype(str).tolist())
+    if not df_combo_off_raw.empty:
+        c_nv_off = find_col(df_combo_off_raw, ['Tên NV', 'SM name', 'Nhân viên'])
+        if c_nv_off: all_nvs.extend(df_combo_off_raw[c_nv_off].dropna().astype(str).tolist())
+    if not df_combo_on_raw.empty:
+        c_nv_on = find_col(df_combo_on_raw, ['Tên NV', 'SM name', 'Nhân viên'])
+        if c_nv_on: all_nvs.extend(df_combo_on_raw[c_nv_on].dropna().astype(str).tolist())
+    if not cat_df.empty:
+        c_nv_cat = find_col(cat_df, ['SM Name', 'SM name', 'Tên NVBH', 'Nhân viên'])
+        if c_nv_cat: all_nvs.extend(cat_df[c_nv_cat].dropna().astype(str).tolist())
+    if not brand_df.empty:
+        c_nv_brand = find_col(brand_df, ['SM Name', 'SM name', 'Tên NVBH', 'Nhân viên'])
+        if c_nv_brand: all_nvs.extend(brand_df[c_nv_brand].dropna().astype(str).tolist())
+        
+    nv_list = sorted(list(set([x.strip() for x in all_nvs if x.strip()])))
+    if filter_nv and filter_nv != "Tất cả ĐDKD":
+        nv_list = [filter_nv] if filter_nv in nv_list else [filter_nv]
+
+    mcp_filtered = mcp_df.copy()
+    if not mcp_filtered.empty and f_thu_list:
+        c_thu_mcp = find_col(mcp_filtered, ['Thứ', 'Frequency', 'Tần suất'])
+        mcp_filtered = filter_by_thu_multi(mcp_filtered, c_thu_mcp, f_thu_list)
+
+    vip_map = {}
+    if not mcp_filtered.empty:
+        c_nv_mcp = find_col(mcp_filtered, ['SM Name', 'SM name', 'Tên NVBH', 'Nhân viên'])
+        c_vip = find_col(mcp_filtered, ['VIP MCH', 'VIP_MCH'])
+        c_ma_mcp = find_col(mcp_filtered, ['Outlet_code', 'Outlet Code', 'Mã CH'])
+        if c_nv_mcp and c_vip and c_ma_mcp:
+            df_vip_sub = mcp_filtered[mcp_filtered[c_vip].astype(str).str.strip().isin(['VIP3', 'VIP5', 'VIPSI'])].copy()
+            df_vip_sub['NV'] = df_vip_sub[c_nv_mcp].astype(str).str.strip()
+            df_vip_sub['MA'] = df_vip_sub[c_ma_mcp].astype(str).str.strip()
+            vip_map = df_vip_sub.groupby('NV')['MA'].nunique().to_dict()
+
+    off_filtered = df_combo_off_raw.copy()
+    if not off_filtered.empty and f_thu_list:
+        c_thu_off = find_col(off_filtered, ['Thứ', 'Frequency'])
+        off_filtered = filter_by_thu_multi(off_filtered, c_thu_off, f_thu_list)
+
+    off_map = {}
+    if not off_filtered.empty:
+        c_nv_off = find_col(off_filtered, ['Tên NV', 'SM name', 'Nhân viên'])
+        c_ma_off = find_col(off_filtered, ['outlet_code', 'Outlet Code', 'Mã CH'])
+        if c_nv_off and c_ma_off:
+            df_off_sub = off_filtered.copy()
+            df_off_sub['NV'] = df_off_sub[c_nv_off].astype(str).str.strip()
+            df_off_sub['MA'] = df_off_sub[c_ma_off].astype(str).str.strip()
+            off_map = df_off_sub.groupby('NV')['MA'].nunique().to_dict()
+
+    on_filtered = df_combo_on_raw.copy()
+    if not on_filtered.empty and f_thu_list:
+        c_thu_on = find_col(on_filtered, ['Thứ', 'Frequency'])
+        on_filtered = filter_by_thu_multi(on_filtered, c_thu_on, f_thu_list)
+
+    on_map = {}
+    if not on_filtered.empty:
+        c_nv_on = find_col(on_filtered, ['Tên NV', 'SM name', 'Nhân viên'])
+        c_ma_on = find_col(on_filtered, ['outlet_code', 'Outlet Code', 'Mã CH'])
+        if c_nv_on and c_ma_on:
+            df_on_sub = on_filtered.copy()
+            df_on_sub['NV'] = df_on_sub[c_nv_on].astype(str).str.strip()
+            df_on_sub['MA'] = df_on_sub[c_ma_on].astype(str).str.strip()
+            on_map = df_on_sub.groupby('NV')['MA'].nunique().to_dict()
+
+    cat_filtered = cat_df.copy()
+    if not cat_filtered.empty and f_thu_list:
+        c_thu_cat = find_col(cat_filtered, ['Thứ'])
+        cat_filtered = filter_by_thu_multi(cat_filtered, c_thu_cat, f_thu_list)
+
+    cat_map = {}
+    if not cat_filtered.empty:
+        c_nv_cat = find_col(cat_filtered, ['SM Name', 'SM name', 'Tên NVBH', 'Nhân viên'])
+        c_ma_cat = find_col(cat_filtered, ['Outlet Code', 'Outlet_code', 'Mã CH'])
+        if c_nv_cat and c_ma_cat:
+            df_cat_sub = cat_filtered.copy()
+            df_cat_sub['NV'] = df_cat_sub[c_nv_cat].astype(str).str.strip()
+            df_cat_sub['MA'] = df_cat_sub[c_ma_cat].astype(str).str.strip()
+            cat_map = df_cat_sub.groupby('NV')['MA'].nunique().to_dict()
+
+    brand_filtered = brand_df.copy()
+    if not brand_filtered.empty and f_thu_list:
+        c_thu_brand = find_col(brand_filtered, ['Thứ'])
+        brand_filtered = filter_by_thu_multi(brand_filtered, c_thu_brand, f_thu_list)
+
+    brand_map = {}
+    if not brand_filtered.empty:
+        c_nv_brand = find_col(brand_filtered, ['SM Name', 'SM name', 'Tên NVBH', 'Nhân viên'])
+        c_ma_brand = find_col(brand_filtered, ['Outlet Code', 'Outlet_code', 'Mã CH'])
+        if c_nv_brand and c_ma_brand:
+            df_brand_sub = brand_filtered.copy()
+            df_brand_sub['NV'] = df_brand_sub[c_nv_brand].astype(str).str.strip()
+            df_brand_sub['MA'] = df_brand_sub[c_ma_brand].astype(str).str.strip()
+            brand_map = df_brand_sub.groupby('NV')['MA'].nunique().to_dict()
 
     rows = []
-    for sm in all_sms:
-        rows.append({'Mã NVBH':sm, 'Tên NVBH':sm_names.get(sm,''),
-            'Phát sinh Ngày (OFF)':int(off_ngay.get(sm,0)), 'MTD (OFF)':int(off_mtd.get(sm,0)),
-            'Phát sinh Ngày (ON)':int(on_ngay.get(sm,0)), 'MTD (ON)':int(on_mtd.get(sm,0))})
-    df_out = pd.DataFrame(rows).sort_values('MTD (OFF)', ascending=False).reset_index(drop=True)
-    df_out.insert(0, 'STT', range(1, len(df_out)+1))
-    total_row = pd.DataFrame([{'STT':'-', 'Mã NVBH':'TỔNG CỘNG',
-        'Tên NVBH':'SS Nguyễn Thị Tường Vy Total' if filter_nv=="Tất cả ĐDKD" else filter_nv,
-        'Phát sinh Ngày (OFF)':int(df_out['Phát sinh Ngày (OFF)'].sum()) if not df_out.empty else 0,
-        'MTD (OFF)':int(df_out['MTD (OFF)'].sum()) if not df_out.empty else 0,
-        'Phát sinh Ngày (ON)':int(df_out['Phát sinh Ngày (ON)'].sum()) if not df_out.empty else 0,
-        'MTD (ON)':int(df_out['MTD (ON)'].sum()) if not df_out.empty else 0}])
-    return pd.concat([df_out, total_row], ignore_index=True)
+    for nv in nv_list:
+        v_val = int(vip_map.get(nv, 0))
+        off_val = int(off_map.get(nv, 0))
+        on_val = int(on_map.get(nv, 0))
+        cat_val = int(cat_map.get(nv, 0))
+        brand_val = int(brand_map.get(nv, 0))
+        
+        rows.append({
+            'Tên NV': nv,
+            'VIP MCH': v_val,
+            'KH Combo OFF': off_val,
+            'KH Combo ON': on_val,
+            'MBS Cat': cat_val,
+            'MBS Brand': brand_val
+        })
+        
+    df_out = pd.DataFrame(rows)
+    if not df_out.empty:
+        df_out = df_out.sort_values('Tên NV', ascending=True).reset_index(drop=True)
+        df_out.insert(0, 'STT', range(1, len(df_out)+1))
+        
+        tot_vip = int(df_out['VIP MCH'].sum())
+        tot_off = int(df_out['KH Combo OFF'].sum())
+        tot_on = int(df_out['KH Combo ON'].sum())
+        tot_cat = int(df_out['MBS Cat'].sum())
+        tot_brand = int(df_out['MBS Brand'].sum())
+        
+        total_row = pd.DataFrame([{
+            'STT': '-',
+            'Tên NV': 'TỔNG CỘNG',
+            'VIP MCH': tot_vip,
+            'KH Combo OFF': tot_off,
+            'KH Combo ON': tot_on,
+            'MBS Cat': tot_cat,
+            'MBS Brand': tot_brand
+        }])
+        df_out = pd.concat([df_out, total_row], ignore_index=True)
+        
+    return df_out
 
 def render_html_table(df):
     html = ['<div style="overflow-x: auto;"><table class="custom-kpi-table">']
@@ -513,27 +729,27 @@ def render_html_table(df):
     
     html.append('<tbody>')
     for _, row in df.iterrows():
-        is_total = str(row.get('Mã NVBH', '')).strip() == 'TỔNG CỘNG'
+        is_total = str(row.get('Tên NV', '')).strip() == 'TỔNG CỘNG'
         html.append('<tr>')
         for col in df.columns:
             val = row[col]
             if pd.isna(val): val = ""
             
-            if col == '% MTD':
+            if col in ['% MTD', '% MTD (OFF)', '% MTD (ON)']:
                 style_bg = color_pct_bg(val)
                 if is_total:
                     html.append(f'<td style="{style_bg} text-align: center; font-weight: bold;">{val}</td>')
                 else:
                     html.append(f'<td style="{style_bg} text-align: center;">{val}</td>')
             elif is_total:
-                if col == 'Tên NVBH':
+                if col == 'Tên NV':
                     html.append(f'<td style="background-color: #ffffff; color: #9b2c2c; font-weight: bold; text-align: left; white-space: nowrap;">{val}</td>')
                 else:
                     html.append(f'<td style="background-color: #ffffff; color: #9b2c2c; font-weight: bold; text-align: center; white-space: nowrap;">{val}</td>')
-            elif col == 'Tên NVBH':
+            elif col == 'Tên NV':
                 html.append(f'<td style="color: #1a365d; text-align: left; white-space: nowrap;">{val}</td>')
             else:
-                align = 'center' if col in ['STT', 'Mã NVBH', 'Thực Hiện Ngày', 'MTD', 'Phát sinh Ngày (OFF)', 'MTD (OFF)', 'Phát sinh Ngày (ON)', 'MTD (ON)', 'Chỉ Tiêu KPI'] else 'left'
+                align = 'center' if col in ['STT', 'Mã NVBH', 'Thực Hiện Ngày', 'MTD', 'Phát sinh Ngày (OFF)', 'MTD (OFF)', 'Phát sinh Ngày (ON)', 'MTD (ON)', 'Chỉ Tiêu KPI', 'Target (OFF)', 'Target (ON)', 'VIP MCH', 'KH Combo OFF', 'KH Combo ON', 'MBS Cat', 'MBS Brand'] else 'left'
                 html.append(f'<td style="text-align: {align}; white-space: nowrap;">{val}</td>')
         html.append('</tr>')
     html.append('</tbody>')
@@ -551,7 +767,6 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# Nút Xóa Cache & Reload Data hiện trực tiếp trên màn hình chính
 col_reload, col_empty = st.columns([2, 5])
 with col_reload:
     if st.button("🔄 Xóa Cache & Reload Dữ Liệu"):
@@ -563,15 +778,14 @@ with st.spinner("Đang tải dữ liệu..."):
     targets = get_targets()
     df_cat = load_cat_data()
     df_brand = load_brand_data()
+    df_combo_off, df_combo_on = load_combo_data()
     
-    # ÁP DỤNG RULE CHẠY DOANH SỐ MTD CHO 3 TAB MCP, CAT, BRAND
     mcp = process_mcp_sales(df, mcp)
     df_cat = process_cat_sales(df, df_cat)
     df_brand = process_brand_sales(df, df_brand)
 
-nv_list = ["Tất cả ĐDKD"] + sorted(df['Tên NVBH'].dropna().unique().tolist())
+nv_list = sorted(df['Tên NVBH'].dropna().unique().tolist())
 
-# Compact filter bar
 f1, f2, f3 = st.columns([1, 1, 1.3])
 with f1:
     st.markdown('<p class="filter-label">MONTH</p>', unsafe_allow_html=True)
@@ -588,6 +802,7 @@ with f3:
         "4. PC BT KÊNH OFF (ĐƠN ≥ 4 LINE - LOẠI BEER)": "PC_BT",
         "5. ASO ALL KÊNH OFF": "ASO_ALL",
         "6. BÁO CÁO ĐƠN HÀNG COMBO": "COMBO",
+        "7. BÁO CÁO TỔNG HỢP THEO NHÂN VIÊN": "SUMMARY",
     }
     selected_name = st.selectbox("", list(kpi_map.keys()), key="kpi", label_visibility="collapsed")
     selected_kpi = kpi_map[selected_name]
@@ -598,34 +813,68 @@ with f4:
     st.selectbox("", ["Nguyễn Thị Tường Vy Total"], key="sup", label_visibility="collapsed")
 with f5:
     st.markdown('<p class="filter-label">ĐDKD (Nhân viên)</p>', unsafe_allow_html=True)
-    filter_nv = st.selectbox("", nv_list, key="ddkd", label_visibility="collapsed")
+    filter_nv = st.selectbox("", ["Tất cả ĐDKD"] + nv_list, key="ddkd", label_visibility="collapsed")
 
 st.markdown("---")
 
-tab_kpi, tab_mcp, tab_cat, tab_brand = st.tabs([
-    "📊 BÁO CÁO KPI", "🗺️ MCP VISIT", "📦 TRACKING MBS - CAT", "🏷️ TRACKING MBS - BRAND"
+tab_kpi, tab_mcp, tab_cat, tab_brand, tab_dskh_off, tab_dskh_on = st.tabs([
+    "📊 BÁO CÁO KPI", "🗺️ MCP VISIT", "📦 TRACKING MBS - CAT", "🏷️ TRACKING MBS - BRAND", "📋 DSKH_Combo OFF", "📋 DSKH_Combo ON"
 ])
 
 # ----- TAB KPI -----
 with tab_kpi:
-    if selected_kpi != "COMBO":
+    if selected_kpi == "SUMMARY":
+        saved_sum_thu = st.query_params.get("sum_thu", "")
+        default_sum_thu_list = [x.strip() for x in saved_sum_thu.split(",") if x.strip()] if saved_sum_thu else []
+        
+        def update_sum_params():
+            st.query_params["sum_thu"] = ",".join(st.session_state.sum_thu_input) if st.session_state.sum_thu_input else ""
+
+        col_f_thu, col_empty_sum = st.columns([1, 1])
+        with col_f_thu:
+            st.markdown('<p class="filter-label">📅 Lọc Theo Thứ (Chọn nhiều)</p>', unsafe_allow_html=True)
+            thu_opts = ["2","3","4","5","6","7","25","36","47"]
+            valid_sum_thu = [t for t in default_sum_thu_list if t in thu_opts]
+            f_thu_sum = st.multiselect("", thu_opts, default=valid_sum_thu, key="sum_thu_input", on_change=update_sum_params, label_visibility="collapsed")
+        st.query_params["sum_thu"] = ",".join(st.session_state.sum_thu_input) if st.session_state.sum_thu_input else ""
+
+        df_summary = build_summary_report(mcp, df_combo_off, df_combo_on, df_cat, df_brand, filter_nv, f_thu_sum)
+        tot_row_s = df_summary.iloc[-1]
+        
+        st.markdown(f'<h3 style="color: #034ea2; font-weight: 800; margin-bottom: 0px;">7. BÁO CÁO TỔNG HỢP THEO NHÂN VIÊN - THÁNG {report_date.strftime("%m/%Y")}</h3>', unsafe_allow_html=True)
+        st.caption(f"⚡ Ngày: {report_date.strftime('%d/%m/%Y')} | Lọc NV: {filter_nv} | Lọc Thứ: {f_thu_sum if f_thu_sum else 'Tất cả'} | Nguyên tắc: Count Distinct Mã KH (VIP3, VIP5, VIPSI)")
+        
+        c1, c2, c3, c4 = st.columns(4)
+        with c1: render_metric_card("Tổng VIP MCH", f"{tot_row_s['VIP MCH']:,}")
+        with c2: render_metric_card("Tổng KH Combo OFF", f"{tot_row_s['KH Combo OFF']:,}")
+        with c3: render_metric_card("Tổng KH Combo ON", f"{tot_row_s['KH Combo ON']:,}")
+        with c4: render_metric_card("Tổng MBS Cat / Brand", f"{tot_row_s['MBS Cat']:,} / {tot_row_s['MBS Brand']:,}")
+        
+        st.markdown(render_html_table(df_summary), unsafe_allow_html=True)
+        st.markdown(f"""
+        <div class="note-box">
+            <b>NHẬN XÉT BÁO CÁO TỔNG HỢP:</b><br>
+            • Tổng số lượng cửa hàng VIP (VIP3, VIP5, VIPSI) toàn đội: <b>{tot_row_s['VIP MCH']:,} cửa hàng</b>.<br>
+            • Tổng số lượng KH tham gia Combo OFF: <b>{tot_row_s['KH Combo OFF']:,} CH</b> | Combo ON: <b>{tot_row_s['KH Combo ON']:,} CH</b>.<br>
+            • Tổng MBS Category: <b>{tot_row_s['MBS Cat']:,} CH</b> | Tổng MBS Brand: <b>{tot_row_s['MBS Brand']:,} CH</b>.<br>
+            • Đã tích hợp bộ lọc theo <b>Thứ</b> giúp bro dễ dàng tracking tuyến bán hàng trong tuần.
+        </div>
+        """, unsafe_allow_html=True)
+        
+    elif selected_kpi != "COMBO":
         df_r, team_tgt, title = build_report(df, report_date, targets, selected_kpi, filter_nv)
         total_row = df_r.iloc[-1]
         total_mtd = int(total_row['MTD'])
         total_ngay = int(total_row['Thực Hiện Ngày'])
         pct_team = total_row['% MTD']
-
-        st.subheader(f"{title} - THÁNG {report_date.strftime('%m/%Y')}")
+        st.markdown(f'<h3 style="color: #034ea2; font-weight: 800; margin-bottom: 0px;">{title} - THÁNG {report_date.strftime("%m/%Y")}</h3>', unsafe_allow_html=True)
         st.caption(f"⚡ Ngày: {report_date.strftime('%d/%m/%Y')} | Lọc: {filter_nv}")
-
         c1, c2, c3, c4 = st.columns(4)
         with c1: render_metric_card("🎯 Target", f"{team_tgt:,}")
         with c2: render_metric_card("📈 MTD", f"{total_mtd:,}")
         with c3: render_metric_card("📊 % MTD", pct_team)
         with c4: render_metric_card("🆕 Ngày", f"+{total_ngay}")
-
         st.markdown(render_html_table(df_r), unsafe_allow_html=True)
-
         df_eval = df_r.iloc[:-1].copy()
         df_eval['_pct_val'] = df_eval['% MTD'].str.replace('%','').astype(float)
         
@@ -635,7 +884,6 @@ with tab_kpi:
         
         top3_text = ", ".join([f"{r['Tên NVBH']} ({r['% MTD']})" for _, r in top3.iterrows()])
         bottom3_text = ", ".join([f"{r['Tên NVBH']} ({r['% MTD']})" for _, r in bottom3.iterrows()])
-
         st.markdown(f"""
         <div class="note-box">
             <b>NHẬN XÉT ({title} - {report_date.strftime('%d/%m/%Y')}):</b><br>
@@ -645,26 +893,71 @@ with tab_kpi:
         </div>
         """, unsafe_allow_html=True)
     else:
-        df_combo = build_combo(df, report_date, filter_nv)
+        df_combo, target_off_total, target_on_total = build_combo_matrix(df, report_date, df_combo_off, df_combo_on, filter_nv)
         total_row = df_combo.iloc[-1]
         total_off = int(total_row['MTD (OFF)'])
         total_on = int(total_row['MTD (ON)'])
         ngay_off = int(total_row['Phát sinh Ngày (OFF)'])
         ngay_on = int(total_row['Phát sinh Ngày (ON)'])
+        
+        pct_off_team = round(total_off / target_off_total * 100, 1) if target_off_total else 0
+        pct_on_team = round(total_on / target_on_total * 100, 1) if target_on_total else 0
 
-        st.subheader(f"6. BÁO CÁO ĐƠN HÀNG COMBO - THÁNG {report_date.strftime('%m/%Y')}")
+        st.markdown(f'<h3 style="color: #034ea2; font-weight: 800; margin-bottom: 0px;">6. BÁO CÁO ĐƠN HÀNG COMBO LŨY KẾ (MATRIX OFF/ON) - THÁNG {report_date.strftime("%m/%Y")}</h3>', unsafe_allow_html=True)
+        st.caption(f"⚡ Ngày: {report_date.strftime('%d/%m/%Y')} | Lọc: {filter_nv} | Target OFF: {target_off_total} CH | Target ON: {target_on_total} CH")
         
         c1, c2, c3, c4 = st.columns(4)
-        with c1: render_metric_card("MTD OFF", f"{total_off}")
-        with c2: render_metric_card("MTD ON", f"{total_on}")
-        with c3: render_metric_card("Ngày OFF", f"+{ngay_off}")
-        with c4: render_metric_card("Ngày ON", f"+{ngay_on}")
-
+        with c1: render_metric_card("MTD OFF / Target", f"{total_off:,} / {target_off_total:,} ({pct_off_team}%)")
+        with c2: render_metric_card("MTD ON / Target", f"{total_on:,} / {target_on_total:,} ({pct_on_team}%)")
+        with c3: render_metric_card("Phát sinh Ngày (OFF)", f"+{ngay_off}")
+        with c4: render_metric_card("Phát sinh Ngày (ON)", f"+{ngay_on}")
+        
         st.markdown(render_html_table(df_combo), unsafe_allow_html=True)
+        st.markdown(f"""
+        <div class="note-box">
+            <b>NHẬN XÉT BÁO CÁO COMBO LŨY KẾ (MATRIX OFF/ON):</b><br>
+            • <b>Kênh OFF:</b> Đạt <b>{total_off:,} / {target_off_total:,} CH ({pct_off_team}%)</b> | Phát sinh mới trong ngày: <b>+{ngay_off} CH</b>.<br>
+            • <b>Kênh ON:</b> Đạt <b>{total_on:,} / {target_on_total:,} CH ({pct_on_team}%)</b> | Phát sinh mới trong ngày: <b>+{ngay_on} CH</b>.<br>
+            • Đã sắp xếp danh sách theo <b>% MTD (OFF) từ thấp đến cao</b> để bro dễ dàng tracking các ĐDKD cần đôn đốc.
+        </div>
+        """, unsafe_allow_html=True)
+
+# Callbacks for instant query params sync
+def update_mcp_params():
+    st.query_params["mcp_nv"] = ",".join(st.session_state.mcp_nv_input) if st.session_state.mcp_nv_input else ""
+    st.query_params["mcp_thu"] = ",".join(st.session_state.mcp_thu_input) if st.session_state.mcp_thu_input else ""
+    st.query_params["mcp_ma"] = st.session_state.mcp_ma_input
+    st.query_params["mcp_ten"] = st.session_state.mcp_ten_input
+    st.query_params["mcp_vip"] = ",".join(st.session_state.mcp_vip_input) if st.session_state.mcp_vip_input else ""
+    st.query_params["mcp_ds"] = ",".join(st.session_state.mcp_ds_input) if st.session_state.mcp_ds_input else ""
+
+def update_cat_params():
+    st.query_params["cat_nv"] = ",".join(st.session_state.cat_nv_input) if st.session_state.cat_nv_input else ""
+    st.query_params["cat_thu"] = ",".join(st.session_state.cat_thu_input) if st.session_state.cat_thu_input else ""
+    st.query_params["cat_ma"] = st.session_state.cat_ma_input
+    st.query_params["cat_ten"] = st.session_state.cat_ten_input
+
+def update_brand_params():
+    st.query_params["brand_nv"] = ",".join(st.session_state.brand_nv_input) if st.session_state.brand_nv_input else ""
+    st.query_params["brand_thu"] = ",".join(st.session_state.brand_thu_input) if st.session_state.brand_thu_input else ""
+    st.query_params["brand_ma"] = st.session_state.brand_ma_input
+    st.query_params["brand_ten"] = st.session_state.brand_ten_input
+
+def update_off_params():
+    st.query_params["off_nv"] = ",".join(st.session_state.off_nv_input) if st.session_state.off_nv_input else ""
+    st.query_params["off_thu"] = ",".join(st.session_state.off_thu_input) if st.session_state.off_thu_input else ""
+    st.query_params["off_ma"] = st.session_state.off_ma_input
+    st.query_params["off_ten"] = st.session_state.off_ten_input
+
+def update_on_params():
+    st.query_params["on_nv"] = ",".join(st.session_state.on_nv_input) if st.session_state.on_nv_input else ""
+    st.query_params["on_thu"] = ",".join(st.session_state.on_thu_input) if st.session_state.on_thu_input else ""
+    st.query_params["on_ma"] = st.session_state.on_ma_input
+    st.query_params["on_ten"] = st.session_state.on_ten_input
 
 # ----- TAB MCP -----
 with tab_mcp:
-    st.subheader("🗺️ MCP VISIT & MAPPING DOANH SỐ BÁN HÀNG")
+    st.markdown('<h3 style="color: #034ea2; font-weight: 800; margin-bottom: 0px;">🗺️ MCP VISIT & MAPPING DOANH SỐ BÁN HÀNG</h3>', unsafe_allow_html=True)
     if mcp.empty:
         st.warning("Chưa có dữ liệu MCP")
     else:
@@ -672,115 +965,378 @@ with tab_mcp:
         col_ma = find_col(mcp, ['Outlet_code','Outlet Code','Mã CH','Mã khách hàng','Poscode'])
         col_ten = find_col(mcp, ['Outlet_name','Outlet Name','Tên CH','Tên khách hàng'])
         col_thu = find_col(mcp, ['Thứ','Frequency','Tần suất'])
+        col_vip = find_col(mcp, ['VIP MCH', 'VIP_MCH'])
+        col_ds = find_col(mcp, ['Doanh Số MTD', 'Doanh số MTD', 'Doanh_so_MTD'])
+        
+        saved_mcp_nv = st.query_params.get("mcp_nv", "")
+        default_nv_list = [x.strip() for x in saved_mcp_nv.split(",") if x.strip()] if saved_mcp_nv else []
+        
+        saved_mcp_thu = st.query_params.get("mcp_thu", "")
+        default_thu_list = [x.strip() for x in saved_mcp_thu.split(",") if x.strip()] if saved_mcp_thu else []
+        
+        saved_mcp_ma = st.query_params.get("mcp_ma", "")
+        saved_mcp_ten = st.query_params.get("mcp_ten", "")
+        
+        saved_mcp_vip = st.query_params.get("mcp_vip", "")
+        default_vip_list = [x.strip() for x in saved_mcp_vip.split(",") if x.strip()] if saved_mcp_vip else []
+        
+        saved_mcp_ds = st.query_params.get("mcp_ds", "")
+        default_ds_list = [x.strip() for x in saved_mcp_ds.split(",") if x.strip()] if saved_mcp_ds else []
 
-        c1,c2 = st.columns(2)
+        c1, c2 = st.columns(2)
         with c1:
-            st.markdown('<p class="filter-label">👤 Lọc Nhân Viên (ĐDKD)</p>', unsafe_allow_html=True)
-            nv_opts = ["Tất cả ĐDKD"] + (sorted(mcp[col_nv].dropna().astype(str).unique().tolist()) if col_nv else [])
-            f_nv = st.selectbox("", nv_opts, key="mcp_nv", label_visibility="collapsed")
+            st.markdown('<p class="filter-label">👤 Lọc Nhân Viên (ĐDKD - Chọn nhiều)</p>', unsafe_allow_html=True)
+            nv_opts = sorted(mcp[col_nv].dropna().astype(str).unique().tolist()) if col_nv else []
+            valid_default_nv = [v for v in default_nv_list if v in nv_opts]
+            f_nv = st.multiselect("", nv_opts, default=valid_default_nv, key="mcp_nv_input", on_change=update_mcp_params, label_visibility="collapsed")
         with c2:
-            st.markdown('<p class="filter-label">📅 Lọc Theo Thứ</p>', unsafe_allow_html=True)
-            f_thu = st.selectbox("", ["Tất cả các thứ","2","3","4","5","6","7","25","36","47"], key="mcp_thu", label_visibility="collapsed")
-
-        c3,c4 = st.columns(2)
+            st.markdown('<p class="filter-label">📅 Lọc Theo Thứ (Chọn nhiều)</p>', unsafe_allow_html=True)
+            thu_opts = ["2","3","4","5","6","7","25","36","47"]
+            valid_default_thu = [t for t in default_thu_list if t in thu_opts]
+            f_thu = st.multiselect("", thu_opts, default=valid_default_thu, key="mcp_thu_input", on_change=update_mcp_params, label_visibility="collapsed")
+            
+        c3, c4 = st.columns(2)
         with c3:
             st.markdown('<p class="filter-label">🆔 Lọc Mã Khách Hàng</p>', unsafe_allow_html=True)
-            f_ma = st.text_input("", key="mcp_ma", label_visibility="collapsed")
+            f_ma = st.text_input("", value=saved_mcp_ma, key="mcp_ma_input", on_change=update_mcp_params, label_visibility="collapsed")
         with c4:
             st.markdown('<p class="filter-label">🏪 Lọc Tên Khách Hàng</p>', unsafe_allow_html=True)
-            f_ten = st.text_input("", key="mcp_ten", label_visibility="collapsed")
+            f_ten = st.text_input("", value=saved_mcp_ten, key="mcp_ten_input", on_change=update_mcp_params, label_visibility="collapsed")
+
+        c5, c6 = st.columns(2)
+        with c5:
+            st.markdown('<p class="filter-label">⭐ Lọc VIP MCH (Chọn nhiều)</p>', unsafe_allow_html=True)
+            vip_opts = sorted(mcp[col_vip].dropna().astype(str).unique().tolist()) if col_vip else []
+            valid_default_vip = [v for v in default_vip_list if v in vip_opts]
+            f_vip = st.multiselect("", vip_opts, default=valid_default_vip, key="mcp_vip_input", on_change=update_mcp_params, label_visibility="collapsed")
+        with c6:
+            st.markdown('<p class="filter-label">💰 Lọc Doanh Số MTD Thực Tế (Chọn nhiều)</p>', unsafe_allow_html=True)
+            if col_ds:
+                raw_ds_vals = sorted(mcp[col_ds].dropna().unique().tolist())
+                ds_opts = [format_number_vn(v) for v in raw_ds_vals]
+            else:
+                ds_opts = []
+            valid_default_ds = [d for d in default_ds_list if d in ds_opts]
+            f_ds = st.multiselect("", ds_opts, default=valid_default_ds, key="mcp_ds_input", on_change=update_mcp_params, label_visibility="collapsed")
+            
+        st.query_params["mcp_nv"] = ",".join(st.session_state.mcp_nv_input) if st.session_state.mcp_nv_input else ""
+        st.query_params["mcp_thu"] = ",".join(st.session_state.mcp_thu_input) if st.session_state.mcp_thu_input else ""
+        st.query_params["mcp_ma"] = st.session_state.mcp_ma_input
+        st.query_params["mcp_ten"] = st.session_state.mcp_ten_input
+        st.query_params["mcp_vip"] = ",".join(st.session_state.mcp_vip_input) if st.session_state.mcp_vip_input else ""
+        st.query_params["mcp_ds"] = ",".join(st.session_state.mcp_ds_input) if st.session_state.mcp_ds_input else ""
 
         df_f = mcp.copy()
-        if f_nv != "Tất cả ĐDKD" and col_nv: df_f = df_f[df_f[col_nv].astype(str)==f_nv]
+        if f_nv and col_nv: df_f = df_f[df_f[col_nv].astype(str).isin(f_nv)]
         if f_ma and col_ma: df_f = df_f[df_f[col_ma].astype(str).str.contains(f_ma, case=False, na=False)]
         if f_ten and col_ten: df_f = df_f[df_f[col_ten].astype(str).str.contains(f_ten, case=False, na=False)]
-        df_f = filter_by_thu(df_f, col_thu, f_thu)
+        if f_vip and col_vip: df_f = df_f[df_f[col_vip].astype(str).isin(f_vip)]
+        
+        if f_ds and col_ds:
+            formatted_col_ds = df_f[col_ds].apply(format_number_vn).astype(str)
+            df_f = df_f[formatted_col_ds.isin(f_ds)]
 
+        df_f = filter_by_thu_multi(df_f, col_thu, f_thu)
         for col in df_f.columns:
             if any(x in col.lower().replace(" ","") for x in ["3msales","doanhsố","doanhso","sales","doanhsômtd"]):
                 df_f[col] = pd.to_numeric(df_f[col], errors='coerce').apply(format_number_vn)
+        
+        all_cols_mcp = df_f.columns.tolist()
+        saved_mcp_cols = st.query_params.get("mcp_cols", None)
+        if saved_mcp_cols:
+            if isinstance(saved_mcp_cols, str):
+                default_cols_mcp = [c.strip() for c in saved_mcp_cols.split(",") if c.strip() in all_cols_mcp]
+            else:
+                default_cols_mcp = [c for c in saved_mcp_cols if c in all_cols_mcp]
+            if not default_cols_mcp: default_cols_mcp = all_cols_mcp
+        else:
+            default_cols_mcp = all_cols_mcp
 
-        st.dataframe(df_f, use_container_width=True, height=450, hide_index=True)
+        with st.popover("👁️ Chọn cột hiển thị (MCP)", use_container_width=False):
+            selected_mcp_cols = st.multiselect("Bỏ chọn để ẩn cột:", all_cols_mcp, default=default_cols_mcp, key="mcp_cols_input")
+        st.query_params["mcp_cols"] = ",".join(selected_mcp_cols)
+
+        st.dataframe(df_f[selected_mcp_cols], use_container_width=True, height=450, hide_index=True)
         st.caption(f"Hiển thị: {len(df_f):,} / {len(mcp):,} cửa hàng")
 
 # ----- TAB CAT -----
 with tab_cat:
-    st.subheader("🎯 TRACKING MBS - THEO NGÀNH HÀNG (CATEGORY)")
+    st.markdown('<h3 style="color: #034ea2; font-weight: 800; margin-bottom: 0px;">🎯 TRACKING MBS - THEO NGÀNH HÀNG (CATEGORY)</h3>', unsafe_allow_html=True)
     if df_cat.empty:
-        st.error("❌ Không tìm thấy Data_Cat.xlsx")
+        st.error("❌ Không tìm thấy Data_Cat.xlsx trong thư mục 'data'")
     else:
         col_nv = find_col(df_cat, ['SM Name','SM name','Tên NVBH','Nhân viên'])
         col_ma = find_col(df_cat, ['Outlet Code','Outlet_code','Mã CH','Mã khách hàng'])
         col_ten = find_col(df_cat, ['Outlet Name','Outlet_name','Tên CH','Tên khách hàng'])
         col_thu = find_col(df_cat, ['Thứ'])
+        
+        saved_cat_nv = st.query_params.get("cat_nv", "")
+        default_cat_nv_list = [x.strip() for x in saved_cat_nv.split(",") if x.strip()] if saved_cat_nv else []
+        
+        saved_cat_thu = st.query_params.get("cat_thu", "")
+        default_cat_thu_list = [x.strip() for x in saved_cat_thu.split(",") if x.strip()] if saved_cat_thu else []
+        
+        saved_cat_ma = st.query_params.get("cat_ma", "")
+        saved_cat_ten = st.query_params.get("cat_ten", "")
 
         c1, c2 = st.columns(2)
         with c1:
-            st.markdown('<p class="filter-label">👤 Lọc Nhân Viên (ĐDKD)</p>', unsafe_allow_html=True)
-            nv_opts = ["Tất cả ĐDKD"] + (sorted(df_cat[col_nv].dropna().astype(str).unique().tolist()) if col_nv else [])
-            f_nv = st.selectbox("", nv_opts, key="cat_nv", label_visibility="collapsed")
+            st.markdown('<p class="filter-label">👤 Lọc Nhân Viên (ĐDKD - Chọn nhiều)</p>', unsafe_allow_html=True)
+            nv_opts = sorted(df_cat[col_nv].dropna().astype(str).unique().tolist()) if col_nv else []
+            valid_cat_nv = [v for v in default_cat_nv_list if v in nv_opts]
+            f_nv = st.multiselect("", nv_opts, default=valid_cat_nv, key="cat_nv_input", on_change=update_cat_params, label_visibility="collapsed")
         with c2:
-            st.markdown('<p class="filter-label">📅 Lọc Theo Thứ</p>', unsafe_allow_html=True)
-            f_thu = st.selectbox("", ["Tất cả các thứ","2","3","4","5","6","7","25","36","47"], key="cat_thu", label_visibility="collapsed")
-
+            st.markdown('<p class="filter-label">📅 Lọc Theo Thứ (Chọn nhiều)</p>', unsafe_allow_html=True)
+            thu_opts = ["2","3","4","5","6","7","25","36","47"]
+            valid_cat_thu = [t for t in default_cat_thu_list if t in thu_opts]
+            f_thu = st.multiselect("", thu_opts, default=valid_cat_thu, key="cat_thu_input", on_change=update_cat_params, label_visibility="collapsed")
+            
         c3, c4 = st.columns(2)
         with c3:
             st.markdown('<p class="filter-label">🆔 Lọc Mã Khách Hàng</p>', unsafe_allow_html=True)
-            f_ma = st.text_input("", key="cat_ma", label_visibility="collapsed")
+            f_ma = st.text_input("", value=saved_cat_ma, key="cat_ma_input", on_change=update_cat_params, label_visibility="collapsed")
         with c4:
             st.markdown('<p class="filter-label">🏪 Lọc Tên Khách Hàng</p>', unsafe_allow_html=True)
-            f_ten = st.text_input("", key="cat_ten", label_visibility="collapsed")
+            f_ten = st.text_input("", value=saved_cat_ten, key="cat_ten_input", on_change=update_cat_params, label_visibility="collapsed")
+            
+        st.query_params["cat_nv"] = ",".join(st.session_state.cat_nv_input) if st.session_state.cat_nv_input else ""
+        st.query_params["cat_thu"] = ",".join(st.session_state.cat_thu_input) if st.session_state.cat_thu_input else ""
+        st.query_params["cat_ma"] = st.session_state.cat_ma_input
+        st.query_params["cat_ten"] = st.session_state.cat_ten_input
 
         df_f = df_cat.copy()
-        if f_nv != "Tất cả ĐDKD" and col_nv: df_f = df_f[df_f[col_nv].astype(str)==f_nv]
+        if f_nv and col_nv: df_f = df_f[df_f[col_nv].astype(str).isin(f_nv)]
         if f_ma and col_ma: df_f = df_f[df_f[col_ma].astype(str).str.contains(f_ma, case=False, na=False)]
         if f_ten and col_ten: df_f = df_f[df_f[col_ten].astype(str).str.contains(f_ten, case=False, na=False)]
-        df_f = filter_by_thu(df_f, col_thu, f_thu)
-
+        df_f = filter_by_thu_multi(df_f, col_thu, f_thu)
         for col in df_f.columns:
             if "doanh số" in col.lower() or "doanhso" in col.lower().replace(" ",""):
                 df_f[col] = pd.to_numeric(df_f[col], errors='coerce').apply(format_number_vn)
+        
+        all_cols_cat = df_f.columns.tolist()
+        saved_cat_cols = st.query_params.get("cat_cols", None)
+        if saved_cat_cols:
+            if isinstance(saved_cat_cols, str):
+                default_cols_cat = [c.strip() for c in saved_cat_cols.split(",") if c.strip() in all_cols_cat]
+            else:
+                default_cols_cat = [c for c in saved_cat_cols if c in all_cols_cat]
+            if not default_cols_cat: default_cols_cat = all_cols_cat
+        else:
+            default_cols_cat = all_cols_cat
 
-        st.dataframe(df_f, use_container_width=True, height=450, hide_index=True)
+        with st.popover("👁️ Chọn cột hiển thị (Category)", use_container_width=False):
+            selected_cat_cols = st.multiselect("Bỏ chọn để ẩn cột:", all_cols_cat, default=default_cols_cat, key="cat_cols_input")
+        st.query_params["cat_cols"] = ",".join(selected_cat_cols)
+
+        st.dataframe(df_f[selected_cat_cols], use_container_width=True, height=450, hide_index=True)
         st.caption(f"Hiển thị: {len(df_f):,} / {len(df_cat):,} dòng")
 
 # ----- TAB BRAND -----
 with tab_brand:
-    st.subheader("🏷️ TRACKING MBS - THEO THƯƠNG HIỆU (BRAND)")
+    st.markdown('<h3 style="color: #034ea2; font-weight: 800; margin-bottom: 0px;">🏷️ TRACKING MBS - THEO THƯƠNG HIỆU (BRAND)</h3>', unsafe_allow_html=True)
     if df_brand.empty:
-        st.error("❌ Không tìm thấy Data_Brand.xlsx")
+        st.error("❌ Không tìm thấy Data_Brand.xlsx trong thư mục 'data'")
     else:
         col_nv = find_col(df_brand, ['SM Name','SM name','Tên NVBH','Nhân viên'])
         col_ma = find_col(df_brand, ['Outlet Code','Outlet_code','Mã CH','Mã khách hàng'])
         col_ten = find_col(df_brand, ['Outlet Name','Outlet_name','Tên CH','Tên khách hàng'])
         col_thu = find_col(df_brand, ['Thứ'])
+        
+        saved_brand_nv = st.query_params.get("brand_nv", "")
+        default_brand_nv_list = [x.strip() for x in saved_brand_nv.split(",") if x.strip()] if saved_brand_nv else []
+        
+        saved_brand_thu = st.query_params.get("brand_thu", "")
+        default_brand_thu_list = [x.strip() for x in saved_brand_thu.split(",") if x.strip()] if saved_brand_thu else []
+        
+        saved_brand_ma = st.query_params.get("brand_ma", "")
+        saved_brand_ten = st.query_params.get("brand_ten", "")
 
         c1, c2 = st.columns(2)
         with c1:
-            st.markdown('<p class="filter-label">👤 Lọc Nhân Viên (ĐDKD)</p>', unsafe_allow_html=True)
-            nv_opts = ["Tất cả ĐDKD"] + (sorted(df_brand[col_nv].dropna().astype(str).unique().tolist()) if col_nv else [])
-            f_nv = st.selectbox("", nv_opts, key="brand_nv", label_visibility="collapsed")
+            st.markdown('<p class="filter-label">👤 Lọc Nhân Viên (ĐDKD - Chọn nhiều)</p>', unsafe_allow_html=True)
+            nv_opts = sorted(df_brand[col_nv].dropna().astype(str).unique().tolist()) if col_nv else []
+            valid_brand_nv = [v for v in default_brand_nv_list if v in nv_opts]
+            f_nv = st.multiselect("", nv_opts, default=valid_brand_nv, key="brand_nv_input", on_change=update_brand_params, label_visibility="collapsed")
         with c2:
-            st.markdown('<p class="filter-label">📅 Lọc Theo Thứ</p>', unsafe_allow_html=True)
-            f_thu = st.selectbox("", ["Tất cả các thứ","2","3","4","5","6","7","25","36","47"], key="brand_thu", label_visibility="collapsed")
-
+            st.markdown('<p class="filter-label">📅 Lọc Theo Thứ (Chọn nhiều)</p>', unsafe_allow_html=True)
+            thu_opts = ["2","3","4","5","6","7","25","36","47"]
+            valid_brand_thu = [t for t in default_brand_thu_list if t in thu_opts]
+            f_thu = st.multiselect("", thu_opts, default=valid_brand_thu, key="brand_thu_input", on_change=update_brand_params, label_visibility="collapsed")
+            
         c3, c4 = st.columns(2)
         with c3:
             st.markdown('<p class="filter-label">🆔 Lọc Mã Khách Hàng</p>', unsafe_allow_html=True)
-            f_ma = st.text_input("", key="brand_ma", label_visibility="collapsed")
+            f_ma = st.text_input("", value=saved_brand_ma, key="brand_ma_input", on_change=update_brand_params, label_visibility="collapsed")
         with c4:
             st.markdown('<p class="filter-label">🏪 Lọc Tên Khách Hàng</p>', unsafe_allow_html=True)
-            f_ten = st.text_input("", key="brand_ten", label_visibility="collapsed")
+            f_ten = st.text_input("", value=saved_brand_ten, key="brand_ten_input", on_change=update_brand_params, label_visibility="collapsed")
+            
+        st.query_params["brand_nv"] = ",".join(st.session_state.brand_nv_input) if st.session_state.brand_nv_input else ""
+        st.query_params["brand_thu"] = ",".join(st.session_state.brand_thu_input) if st.session_state.brand_thu_input else ""
+        st.query_params["brand_ma"] = st.session_state.brand_ma_input
+        st.query_params["brand_ten"] = st.session_state.brand_ten_input
 
         df_f = df_brand.copy()
-        if f_nv != "Tất cả ĐDKD" and col_nv: df_f = df_f[df_f[col_nv].astype(str)==f_nv]
+        if f_nv and col_nv: df_f = df_f[df_f[col_nv].astype(str).isin(f_nv)]
         if f_ma and col_ma: df_f = df_f[df_f[col_ma].astype(str).str.contains(f_ma, case=False, na=False)]
         if f_ten and col_ten: df_f = df_f[df_f[col_ten].astype(str).str.contains(f_ten, case=False, na=False)]
-        df_f = filter_by_thu(df_f, col_thu, f_thu)
-
+        df_f = filter_by_thu_multi(df_f, col_thu, f_thu)
         for col in df_f.columns:
             if "doanh số" in col.lower() or "doanhso" in col.lower().replace(" ",""):
                 df_f[col] = pd.to_numeric(df_f[col], errors='coerce').apply(format_number_vn)
+        
+        all_cols_brand = df_f.columns.tolist()
+        saved_brand_cols = st.query_params.get("brand_cols", None)
+        if saved_brand_cols:
+            if isinstance(saved_brand_cols, str):
+                default_cols_brand = [c.strip() for c in saved_brand_cols.split(",") if c.strip() in all_cols_brand]
+            else:
+                default_cols_brand = [c for c in saved_brand_cols if c in all_cols_brand]
+            if not default_cols_brand: default_cols_brand = all_cols_brand
+        else:
+            default_cols_brand = all_cols_brand
 
-        st.dataframe(df_f, use_container_width=True, height=450, hide_index=True)
+        with st.popover("👁️ Chọn cột hiển thị (Brand)", use_container_width=False):
+            selected_brand_cols = st.multiselect("Bỏ chọn để ẩn cột:", all_cols_brand, default=default_cols_brand, key="brand_cols_input")
+        st.query_params["brand_cols"] = ",".join(selected_brand_cols)
+
+        st.dataframe(df_f[selected_brand_cols], use_container_width=True, height=450, hide_index=True)
         st.caption(f"Hiển thị: {len(df_f):,} / {len(df_brand):,} dòng")
+
+# ----- TAB DSKH_Combo OFF -----
+with tab_dskh_off:
+    st.markdown('<h3 style="color: #034ea2; font-weight: 800; margin-bottom: 0px;">📋 DANH SÁCH KHÁCH HÀNG COMBO OFF (TÂN_COMBO KÊNH OFF)</h3>', unsafe_allow_html=True)
+    if df_combo_off.empty:
+        st.warning("Chưa có dữ liệu Combo OFF trong thư mục 'data'")
+    else:
+        col_nv_off = find_col(df_combo_off, ['Tên NV', 'SM name', 'Nhân viên'])
+        col_ma_off = find_col(df_combo_off, ['outlet_code', 'Outlet Code', 'Mã CH'])
+        col_ten_off = find_col(df_combo_off, ['outlet_name', 'Outlet Name', 'Tên CH'])
+        col_thu_off = find_col(df_combo_off, ['Thứ', 'Frequency'])
+        
+        saved_off_nv = st.query_params.get("off_nv", "")
+        default_off_nv_list = [x.strip() for x in saved_off_nv.split(",") if x.strip()] if saved_off_nv else []
+        
+        saved_off_thu = st.query_params.get("off_thu", "")
+        default_off_thu_list = [x.strip() for x in saved_off_thu.split(",") if x.strip()] if saved_off_thu else []
+        
+        saved_off_ma = st.query_params.get("off_ma", "")
+        saved_off_ten = st.query_params.get("off_ten", "")
+
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown('<p class="filter-label">👤 Lọc Nhân Viên (ĐDKD - Chọn nhiều)</p>', unsafe_allow_html=True)
+            nv_opts_off = sorted(df_combo_off[col_nv_off].dropna().astype(str).unique().tolist()) if col_nv_off else []
+            valid_off_nv = [v for v in default_off_nv_list if v in nv_opts_off]
+            f_off_nv = st.multiselect("", nv_opts_off, default=valid_off_nv, key="off_nv_input", on_change=update_off_params, label_visibility="collapsed")
+        with c2:
+            st.markdown('<p class="filter-label">📅 Lọc Theo Thứ (Chọn nhiều)</p>', unsafe_allow_html=True)
+            thu_opts = ["2","3","4","5","6","7","25","36","47"]
+            valid_off_thu = [t for t in default_off_thu_list if t in thu_opts]
+            f_off_thu = st.multiselect("", thu_opts, default=valid_off_thu, key="off_thu_input", on_change=update_off_params, label_visibility="collapsed")
+            
+        c3, c4 = st.columns(2)
+        with c3:
+            st.markdown('<p class="filter-label">🆔 Lọc Mã Khách Hàng</p>', unsafe_allow_html=True)
+            f_off_ma = st.text_input("", value=saved_off_ma, key="off_ma_input", on_change=update_off_params, label_visibility="collapsed")
+        with c4:
+            st.markdown('<p class="filter-label">🏪 Lọc Tên Khách Hàng</p>', unsafe_allow_html=True)
+            f_off_ten = st.text_input("", value=saved_off_ten, key="off_ten_input", on_change=update_off_params, label_visibility="collapsed")
+            
+        st.query_params["off_nv"] = ",".join(st.session_state.off_nv_input) if st.session_state.off_nv_input else ""
+        st.query_params["off_thu"] = ",".join(st.session_state.off_thu_input) if st.session_state.off_thu_input else ""
+        st.query_params["off_ma"] = st.session_state.off_ma_input
+        st.query_params["off_ten"] = st.session_state.off_ten_input
+
+        df_off_f = df_combo_off.copy()
+        if f_off_nv and col_nv_off: df_off_f = df_off_f[df_off_f[col_nv_off].astype(str).isin(f_off_nv)]
+        if f_off_ma and col_ma_off: df_off_f = df_off_f[df_off_f[col_ma_off].astype(str).str.contains(f_off_ma, case=False, na=False)]
+        if f_off_ten and col_ten_off: df_off_f = df_off_f[df_off_f[col_ten_off].astype(str).str.contains(f_off_ten, case=False, na=False)]
+        df_off_f = filter_by_thu_multi(df_off_f, col_thu_off, f_off_thu)
+        
+        all_cols_off = df_off_f.columns.tolist()
+        saved_off_cols = st.query_params.get("off_cols", None)
+        if saved_off_cols:
+            if isinstance(saved_off_cols, str):
+                default_cols_off = [c.strip() for c in saved_off_cols.split(",") if c.strip() in all_cols_off]
+            else:
+                default_cols_off = [c for c in saved_off_cols if c in all_cols_off]
+            if not default_cols_off: default_cols_off = all_cols_off
+        else:
+            default_cols_off = all_cols_off
+
+        with st.popover("👁️ Chọn cột hiển thị (DSKH OFF)", use_container_width=False):
+            selected_off_cols = st.multiselect("Bỏ chọn để ẩn cột:", all_cols_off, default=default_cols_off, key="off_cols_input")
+        st.query_params["off_cols"] = ",".join(selected_off_cols)
+
+        st.dataframe(df_off_f[selected_off_cols], use_container_width=True, height=450, hide_index=True)
+        st.caption(f"Hiển thị: {len(df_off_f):,} / {len(df_combo_off):,} cửa hàng")
+
+# ----- TAB DSKH_Combo ON -----
+with tab_dskh_on:
+    st.markdown('<h3 style="color: #034ea2; font-weight: 800; margin-bottom: 0px;">📋 DANH SÁCH KHÁCH HÀNG COMBO ON (TÂN_COMBO KÊNH ON)</h3>', unsafe_allow_html=True)
+    if df_combo_on.empty:
+        st.warning("Chưa có dữ liệu Combo ON trong thư mục 'data'")
+    else:
+        col_nv_on = find_col(df_combo_on, ['Tên NV', 'SM name', 'Nhân viên'])
+        col_ma_on = find_col(df_combo_on, ['outlet_code', 'Outlet Code', 'Mã CH'])
+        col_ten_on = find_col(df_combo_on, ['outlet_name', 'Outlet Name', 'Tên CH'])
+        col_thu_on = find_col(df_combo_on, ['Thứ', 'Frequency'])
+        
+        saved_on_nv = st.query_params.get("on_nv", "")
+        default_on_nv_list = [x.strip() for x in saved_on_nv.split(",") if x.strip()] if saved_on_nv else []
+        
+        saved_on_thu = st.query_params.get("on_thu", "")
+        default_on_thu_list = [x.strip() for x in saved_on_thu.split(",") if x.strip()] if saved_on_thu else []
+        
+        saved_on_ma = st.query_params.get("on_ma", "")
+        saved_on_ten = st.query_params.get("on_ten", "")
+
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown('<p class="filter-label">👤 Lọc Nhân Viên (ĐDKD - Chọn nhiều)</p>', unsafe_allow_html=True)
+            nv_opts_on = sorted(df_combo_on[col_nv_on].dropna().astype(str).unique().tolist()) if col_nv_on else []
+            valid_on_nv = [v for v in default_on_nv_list if v in nv_opts_on]
+            f_on_nv = st.multiselect("", nv_opts_on, default=valid_on_nv, key="on_nv_input", on_change=update_on_params, label_visibility="collapsed")
+        with c2:
+            st.markdown('<p class="filter-label">📅 Lọc Theo Thứ (Chọn nhiều)</p>', unsafe_allow_html=True)
+            thu_opts = ["2","3","4","5","6","7","25","36","47"]
+            valid_on_thu = [t for t in default_on_thu_list if t in thu_opts]
+            f_on_thu = st.multiselect("", thu_opts, default=valid_on_thu, key="on_thu_input", on_change=update_on_params, label_visibility="collapsed")
+            
+        c3, c4 = st.columns(2)
+        with c3:
+            st.markdown('<p class="filter-label">🆔 Lọc Mã Khách Hàng</p>', unsafe_allow_html=True)
+            f_on_ma = st.text_input("", value=saved_on_ma, key="on_ma_input", on_change=update_on_params, label_visibility="collapsed")
+        with c4:
+            st.markdown('<p class="filter-label">🏪 Lọc Tên Khách Hàng</p>', unsafe_allow_html=True)
+            f_on_ten = st.text_input("", value=saved_on_ten, key="on_ten_input", on_change=update_on_params, label_visibility="collapsed")
+            
+        st.query_params["on_nv"] = ",".join(st.session_state.on_nv_input) if st.session_state.on_nv_input else ""
+        st.query_params["on_thu"] = ",".join(st.session_state.on_thu_input) if st.session_state.on_thu_input else ""
+        st.query_params["on_ma"] = st.session_state.on_ma_input
+        st.query_params["on_ten"] = st.session_state.on_ten_input
+
+        df_on_f = df_combo_on.copy()
+        if f_on_nv and col_nv_on: df_on_f = df_on_f[df_on_f[col_nv_on].astype(str).isin(f_on_nv)]
+        if f_on_ma and col_ma_on: df_on_f = df_on_f[df_on_f[col_ma_on].astype(str).str.contains(f_on_ma, case=False, na=False)]
+        if f_on_ten and col_ten_on: df_on_f = df_on_f[df_on_f[col_ten_on].astype(str).str.contains(f_on_ten, case=False, na=False)]
+        df_on_f = filter_by_thu_multi(df_on_f, col_thu_on, f_on_thu)
+        
+        all_cols_on = df_on_f.columns.tolist()
+        saved_on_cols = st.query_params.get("on_cols", None)
+        if saved_on_cols:
+            if isinstance(saved_on_cols, str):
+                default_cols_on = [c.strip() for c in saved_on_cols.split(",") if c.strip() in all_cols_on]
+            else:
+                default_cols_on = [c for c in saved_on_cols if c in all_cols_on]
+            if not default_cols_on: default_cols_on = all_cols_on
+        else:
+            default_cols_on = all_cols_on
+
+        with st.popover("👁️ Chọn cột hiển thị (DSKH ON)", use_container_width=False):
+            selected_on_cols = st.multiselect("Bỏ chọn để ẩn cột:", all_cols_on, default=default_cols_on, key="on_cols_input")
+        st.query_params["on_cols"] = ",".join(selected_on_cols)
+
+        st.dataframe(df_on_f[selected_on_cols], use_container_width=True, height=450, hide_index=True)
+        st.caption(f"Hiển thị: {len(df_on_f):,} / {len(df_combo_on):,} cửa hàng")
