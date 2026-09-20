@@ -352,24 +352,48 @@ def process_cat_sales(df_rpt, df_cat):
 
 def process_brand_sales(df_rpt, df_brand):
     if df_brand.empty or df_rpt.empty: return df_brand
-    brands_list = [
-        "B'fast", "Bupnon TEA365", "Compact", "Chanté", "Chinsu", "Chinsu Story",
-        "Heo Cao Bồi", "Homey", "Joins", "Kokomi", "Nam Ngư", "NET", "Omachi",
-        "Ponnie", "Red Ruby", "Sachi", "SS", "Sunlight", "VGF", "Vinacafé", "Wake-up 247"
-    ]
+    
+    # Lấy danh sách brand trực tiếp từ Data_Brand.xlsx
+    c_brand_col = [c for c in df_brand.columns if 'brand' in c.lower() and 'danh sách' in c.lower()]
+    brand_col_name = c_brand_col[0] if c_brand_col else 'Danh sách full brand'
+    brands_list = df_brand[brand_col_name].dropna().unique().tolist()
+    
     def match_brand(sku_str):
         if pd.isna(sku_str): return "Khác"
         s = str(sku_str).lower()
-        for b in brands_list:
-            if b.lower() in s: return b
+        sorted_brands = sorted(brands_list, key=len, reverse=True)
+        for b in sorted_brands:
+            b_clean = str(b).lower()
+            if b_clean in s:
+                return b
+            # Ánh xạ Alias / Biến thể tên gọi thực tế trong RPT
+            if b_clean == 'vinacafe' and ('vinacafé' in s or 'vinacafe' in s or 'phil' in s or 'sài gòn' in s or 'sai gon' in s):
+                return b
+            if b_clean == 'wake up 247' and ('wake up 247' in s or 'wake-up 247' in s):
+                return b
+            if b_clean == 'wake up' and ('wake up' in s and '247' not in s):
+                return b
+            if b_clean == 'heo cao bồi' and ('cao bồi' in s or 'cao boi' in s):
+                return b
+            if b_clean == 'bupnon tea365' and ('búp non' in s or 'tea 365' in s or 'tea365' in s):
+                return b
+            if b_clean == 'sư tử trắng' and ('sư tử' in s or 'su tu' in s):
+                return b
+            if b_clean == 'tam thái tử' and ('tam thái tử' in s or 'tam thai tu' in s):
+                return b
+            if b_clean == 'vivant' and ('vivant' in s or 'vĩnh hảo' in s or 'vinh hao' in s):
+                return b
         return "Khác"
         
     df_clean = df_rpt.copy()
-    sku_col = find_col(df_clean, ['Group STD SKU', 'Tên sản phẩm', 'Product Name']) or 'Tên sản phẩm'
-    val_col = find_col(df_clean, ['Tổng tiền', 'Giá trị sau CK']) or 'Tổng tiền'
-    status_col = find_col(df_clean, ['Tình trạng đơn hàng', 'Trạng thái'])
+    sku_col1 = [c for c in df_clean.columns if 'group std' in c.lower()][0] if any('group std' in c.lower() for c in df_clean.columns) else 'Tên sản phẩm'
+    sku_col2 = [c for c in df_clean.columns if 'tên sản phẩm' in c.lower()][0] if any('tên sản phẩm' in c.lower() for c in df_clean.columns) else 'Tên sản phẩm'
     
-    df_clean['Mapped_Brand'] = df_clean[sku_col].apply(match_brand)
+    df_clean['Search_Str'] = (df_clean[sku_col1].astype(str) + " " + df_clean[sku_col2].astype(str))
+    val_col = [c for c in df_clean.columns if 'tổng tiền' in c.lower() or 'giá trị sau ck' in c.lower()][0] if any('tổng tiền' in c.lower() for c in df_clean.columns) else 'Tổng tiền'
+    status_col = [c for c in df_clean.columns if 'tình trạng đơn hàng' in c.lower()][0] if any('tình trạng đơn hàng' in c.lower() for c in df_clean.columns) else None
+    
+    df_clean['Mapped_Brand'] = df_clean['Search_Str'].apply(match_brand)
     df_clean['Mã CH_str'] = df_clean['Mã CH'].astype(str).str.strip()
     
     df_valid = df_clean[df_clean[status_col] != 'Đã hủy'] if status_col else df_clean
@@ -381,12 +405,11 @@ def process_brand_sales(df_rpt, df_brand):
     agg_b2.columns = ['Outlet_key', 'Brand_Key', 'Val2']
     
     df_out = df_brand.copy()
-    c_code = find_col(df_out, ['Outlet Code', 'Outlet_code', 'Mã CH'])
-    c_brand = find_col(df_out, ['Danh sách full brand', 'Brand', 'Brands'])
-    col_val1 = find_col(df_out, ['Doanh số thực đạt của brand', 'Doanh số thực đạt brand'])
-    col_val2 = find_col(df_out, ['Doanh số thực đạt của brand (Not Cancel/Pending)', 'Doanh số thực đạt of brand(Not Cancel/Pending)'])
+    c_code = [c for c in df_out.columns if 'outlet code' in c.lower() or 'mã ch' in c.lower()][0]
+    c_brand = brand_col_name
+    col_val1 = [c for c in df_out.columns if 'doanh số thực đạt của brand' in c.lower() and 'not' not in c.lower()][0]
+    col_val2 = [c for c in df_out.columns if 'doanh số thực đạt của brand' in c.lower() and 'not' in c.lower()][0]
     
-    if not c_code or not c_brand: return df_out
     df_out['_outlet_key'] = df_out[c_code].astype(str).str.strip()
     df_out['_brand_key'] = df_out[c_brand].astype(str).str.strip()
     
