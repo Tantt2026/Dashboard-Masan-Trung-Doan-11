@@ -652,7 +652,7 @@ def build_summary_report(df, report_date, df_combo_off_raw, df_combo_on_raw, cat
                 df_vip_sub['DS'] = pd.to_numeric(df_vip_sub[col_ds_mcp], errors='coerce').fillna(0)
                 vip_actual_map = df_vip_sub[df_vip_sub['DS'] > 0].groupby('NV')['MA'].nunique().to_dict()
 
-    # KH Combo OFF & ON (Lọc theo thứ chuẩn xác cho cả target và actual)
+    # KH Combo OFF & ON (Đã fix lọc theo thứ chuẩn xác cho target và actual)
     df_mtd = df[df['date'] >= date(report_date.year, report_date.month, 1)].copy()
 
     def is_combo_off(row):
