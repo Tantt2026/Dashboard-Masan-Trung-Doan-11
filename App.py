@@ -583,13 +583,12 @@ def build_turnover_report(df, report_date, turnover_targets, filter_nv=None):
     }])
     return pd.concat([df_out, total_row], ignore_index=True), team_tgt, "8. BÁO CÁO DOANH SỐ TURNOVER"
 
-# ====================== BÁO CÁO LỊCH VIẾNG THĂM (CHUẨN ISO TUẦN CHẮN/LẺ) ======================
+# ====================== BÁO CÁO LỊCH VIẾNG THĂM ======================
 def build_visit_report(df_mcp, report_date, filter_nv=None, f_thu_list=None):
     if df_mcp.empty:
         return pd.DataFrame(), "10. BÁO CÁO LỊCH VIẾNG THĂM"
     
     mcp_f = df_mcp.copy()
-    
     iso_year, iso_week, iso_day = report_date.isocalendar()
     is_odd_iso_week = (iso_week % 2 == 1)
     
@@ -1038,13 +1037,13 @@ def render_summary_html_table(df, selected_metrics):
             if 'CT DS' in col or 'MTD (Cat)' in col or 'MTD (Brand)' in col:
                 val = format_scaled_thousand(val)
             is_pct = '%' in col
-            style_bg = color_pct_bg(val) if is_pct and not is_total else ''
+            style_bg = color_pct_bg(val) if is_pct else ''
             
             if is_total:
                 if col in ['CT DS (Cat)', 'MTD (Cat)', 'CT DS (Brand)', 'MTD (Brand)']:
                     html.append(f'<td style="background-color: #fff5f5; color: #c53030 !important; font-weight: 900 !important; text-align: right; white-space: nowrap;">{val}</td>')
                 elif is_pct:
-                    html.append(f'<td style="{style_bg} text-align: center; font-weight: 900 !important; color: #c53030 !important;">{val}</td>')
+                    html.append(f'<td style="{style_bg} text-align: center; font-weight: 900 !important;">{val}</td>')
                 else:
                     align = 'left' if col == 'Tên NV' else 'center'
                     html.append(f'<td style="background-color: #fff5f5; color: #c53030 !important; font-weight: 900 !important; text-align: {align}; white-space: nowrap;">{val}</td>')
@@ -1076,7 +1075,7 @@ def render_html_table(df):
             if col in ['% MTD', '% MTD (OFF)', '% MTD (ON)', '% Hoàn Thành']:
                 style_bg = color_pct_bg(val)
                 if is_total:
-                    html.append(f'<td style="{style_bg} text-align: center; font-weight: 900 !important; color: #c53030 !important;">{val}</td>')
+                    html.append(f'<td style="{style_bg} text-align: center; font-weight: 900 !important;">{val}</td>')
                 else:
                     html.append(f'<td style="{style_bg} text-align: center;">{val}</td>')
             elif is_total:
