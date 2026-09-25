@@ -1913,3 +1913,1396 @@ def build_summary_report(
 
     tot_on_tgt = int(df_out['KH Combo ON'].sum())
     tot_on_act = int(df_out['Đã Mua (ON)'].sum())
+    tot_on_pct = round(tot_on_act / tot_on_tgt * 100, 1) if tot_on_tgt else 0
+
+    tot_cat_tgt = int(df_out['MBS Cat'].sum())
+    tot_cat_act = int(df_out['Đã Mua (Cat)'].sum())
+    tot_cat_pct = round(tot_cat_act / tot_cat_tgt * 100, 1) if tot_cat_tgt else 0
+    tot_cat_ct = float(df_out['CT DS (Cat)'].sum())
+    tot_cat_m = float(df_out['MTD (Cat)'].sum())
+    tot_cat_m_pct = (
+        round(tot_cat_m / tot_cat_ct * 100, 1) if tot_cat_ct else 0
+    )
+
+    tot_brand_tgt = int(df_out['MBS Brand'].sum())
+    tot_brand_act = int(df_out['Đã Mua (Brand)'].sum())
+    tot_brand_pct = (
+        round(tot_brand_act / tot_brand_tgt * 100, 1) if tot_brand_tgt else 0
+    )
+    tot_brand_ct = float(df_out['CT DS (Brand)'].sum())
+    tot_brand_m = float(df_out['MTD (Brand)'].sum())
+    tot_brand_m_pct = (
+        round(tot_brand_m / tot_brand_ct * 100, 1) if tot_brand_ct else 0
+    )
+
+    total_row = pd.DataFrame([{
+        'STT': '-',
+        'Tên NV': 'TỔNG CỘNG',
+        'VIP MCH': tot_v_tgt,
+        'Đã Mua (VIP)': tot_v_act,
+        '% MTD (VIP)': f'{tot_v_pct}%',
+        'KH Combo OFF': tot_off_tgt,
+        'Đã Mua (OFF)': tot_off_act,
+        '% MTD (OFF)': f'{tot_off_pct}%',
+        'KH Combo ON': tot_on_tgt,
+        'Đã Mua (ON)': tot_on_act,
+        '% MTD (ON)': f'{tot_on_pct}%',
+        'MBS Cat': tot_cat_tgt,
+        'Đã Mua (Cat)': tot_cat_act,
+        '% MTD (Cat)': f'{tot_cat_pct}%',
+        'CT DS (Cat)': tot_cat_ct,
+        'MTD (Cat)': tot_cat_m,
+        '% MTD DS (Cat)': f'{tot_cat_m_pct}%',
+        'MBS Brand': tot_brand_tgt,
+        'Đã Mua (Brand)': tot_brand_act,
+        '% MTD (Brand)': f'{tot_brand_pct}%',
+        'CT DS (Brand)': tot_brand_ct,
+        'MTD (Brand)': tot_brand_m,
+        '% MTD DS (Brand)': f'{tot_brand_m_pct}%',
+    }])
+    df_out = pd.concat([df_out, total_row], ignore_index=True)
+
+  return df_out
+
+
+def render_summary_html_table(df, selected_metrics):
+  has_vip = 'VIP MCH' in selected_metrics
+  has_off = 'KH Combo OFF' in selected_metrics
+  has_on = 'KH Combo ON' in selected_metrics
+  has_cat = 'MBS Cat' in selected_metrics
+  has_brand = 'MBS Brand' in selected_metrics
+
+  html = [
+      '<div style="overflow-x: auto; -webkit-overflow-scrolling:'
+      ' touch;"><table class="custom-kpi-table">'
+  ]
+
+  html.append('<thead>')
+  html.append('<tr>')
+  html.append('<th rowspan="2" style="vertical-align: middle;">STT</th>')
+  html.append('<th rowspan="2" style="vertical-align: middle;">Tên NV</th>')
+
+  if has_vip:
+    html.append(
+        '<th colspan="3" style="background-color: #1a365d; color:'
+        ' #ffffff;">VIP MCH</th>'
+    )
+  if has_off:
+    html.append(
+        '<th colspan="3" style="background-color: #1a365d; color:'
+        ' #ffffff;">KH Combo OFF</th>'
+    )
+  if has_on:
+    html.append(
+        '<th colspan="3" style="background-color: #1a365d; color:'
+        ' #ffffff;">KH Combo ON</th>'
+    )
+  if has_cat:
+    html.append(
+        '<th colspan="6" style="background-color: #1a365d; color:'
+        ' #ffffff;">MBS Cat (K VNĐ)</th>'
+    )
+  if has_brand:
+    html.append(
+        '<th colspan="6" style="background-color: #1a365d; color:'
+        ' #ffffff;">MBS Brand (K VNĐ)</th>'
+    )
+  html.append('</tr>')
+
+  html.append('<tr>')
+  sub_headers = []
+  if has_vip:
+    sub_headers.extend(['VIP MCH', 'Đã Mua', '% MTD'])
+  if has_off:
+    sub_headers.extend(['KH Combo OFF', 'Đã Mua', '% MTD'])
+  if has_on:
+    sub_headers.extend(['KH Combo ON', 'Đã Mua', '% MTD'])
+  if has_cat:
+    sub_headers.extend(['MBS Cat', 'Đã Mua', '% MTD', 'CT DS', 'MTD', '% MTD'])
+  if has_brand:
+    sub_headers.extend(
+        ['MBS Brand', 'Đã Mua', '% MTD', 'CT DS', 'MTD', '% MTD']
+    )
+
+  for sh in sub_headers:
+    html.append(f'<th>{sh}</th>')
+  html.append('</tr>')
+  html.append('</thead>')
+
+  html.append('<tbody>')
+  for _, row in df.iterrows():
+    is_total = str(row.get('Tên NV', '')).strip() == 'TỔNG CỘNG'
+    html.append('<tr>')
+
+    cols_order = ['STT', 'Tên NV']
+    if has_vip:
+      cols_order.extend(['VIP MCH', 'Đã Mua (VIP)', '% MTD (VIP)'])
+    if has_off:
+      cols_order.extend(['KH Combo OFF', 'Đã Mua (OFF)', '% MTD (OFF)'])
+    if has_on:
+      cols_order.extend(['KH Combo ON', 'Đã Mua (ON)', '% MTD (ON)'])
+    if has_cat:
+      cols_order.extend([
+          'MBS Cat',
+          'Đã Mua (Cat)',
+          '% MTD (Cat)',
+          'CT DS (Cat)',
+          'MTD (Cat)',
+          '% MTD DS (Cat)',
+      ])
+    if has_brand:
+      cols_order.extend([
+          'MBS Brand',
+          'Đã Mua (Brand)',
+          '% MTD (Brand)',
+          'CT DS (Brand)',
+          'MTD (Brand)',
+          '% MTD DS (Brand)',
+      ])
+
+    for col in cols_order:
+      val = row[col]
+      if pd.isna(val):
+        val = ''
+
+      if 'CT DS' in col or 'MTD (Cat)' in col or 'MTD (Brand)' in col:
+        val = format_scaled_thousand(val)
+
+      is_pct = '%' in col
+      style_bg = color_pct_bg(val) if is_pct else ''
+
+      if is_total:
+        if col in ['CT DS (Cat)', 'MTD (Cat)', 'CT DS (Brand)', 'MTD (Brand)']:
+          html.append(
+              f'<td style="background-color: #fff5f5; color: #c53030'
+              ' !important; font-weight: 900 !important; text-align: right;'
+              f' white-space: nowrap;">{val}</td>'
+          )
+        elif is_pct:
+          html.append(
+              f'<td style="{style_bg} text-align: center; font-weight: 900'
+              f' !important;">{val}</td>'
+          )
+        else:
+          align = 'left' if col == 'Tên NV' else 'center'
+          html.append(
+              f'<td style="background-color: #fff5f5; color: #c53030'
+              ' !important; font-weight: 900 !important; text-align:'
+              f' {align}; white-space: nowrap;">{val}</td>'
+          )
+      else:
+        if col in ['CT DS (Cat)', 'MTD (Cat)', 'CT DS (Brand)', 'MTD (Brand)']:
+          html.append(
+              f'<td style="text-align: right; white-space: nowrap;">{val}</td>'
+          )
+        elif is_pct:
+          html.append(
+              f'<td style="{style_bg} text-align: center;">{val}</td>'
+          )
+        else:
+          align = 'left' if col == 'Tên NV' else 'center'
+          html.append(
+              f'<td style="text-align: {align}; white-space: nowrap;">{val}</td>'
+          )
+    html.append('</tr>')
+  html.append('</tbody>')
+  html.append('</table></div>')
+  return ''.join(html)
+
+
+def render_html_table(df):
+  html = [
+      '<div style="overflow-x: auto; -webkit-overflow-scrolling:'
+      ' touch;"><table class="custom-kpi-table">'
+  ]
+  html.append('<thead><tr>')
+  for col in df.columns:
+    html.append(f'<th>{col}</th>')
+  html.append('</tr></thead>')
+
+  html.append('<tbody>')
+  for _, row in df.iterrows():
+    is_total = (
+        str(row.get('Tên NVBH', '')).strip() == 'TỔNG CỘNG'
+        or str(row.get('Tên NV', '')).strip() == 'TỔNG CỘNG'
+    )
+    html.append('<tr>')
+    for col in df.columns:
+      val = row[col]
+      if pd.isna(val):
+        val = ''
+
+      if col in ['% MTD', '% MTD (OFF)', '% MTD (ON)', '% Hoàn Thành']:
+        style_bg = color_pct_bg(val)
+        if is_total:
+          html.append(
+              f'<td style="{style_bg} text-align: center; font-weight: 900'
+              f' !important;">{val}</td>'
+          )
+        else:
+          html.append(
+              f'<td style="{style_bg} text-align: center;">{val}</td>'
+          )
+      elif is_total:
+        align = (
+            'left'
+            if col in ['Tên NVBH', 'Tên NV']
+            else (
+                'center'
+                if col in ['STT', 'Mã NVBH']
+                else 'right'
+            )
+        )
+        html.append(
+            f'<td style="background-color: #fff5f5; color: #c53030'
+            ' !important; font-weight: 900 !important; text-align:'
+            f' {align}; white-space: nowrap;">{val}</td>'
+        )
+      elif col in ['Tên NVBH', 'Tên NV']:
+        html.append(
+            f'<td style="color: #1a365d; text-align: left; white-space:'
+            f' nowrap;">{val}</td>'
+        )
+      else:
+        align = (
+            'center'
+            if col in [
+                'STT',
+                'Mã NVBH',
+                'Lịch Viếng Thăm Hôm Nay',
+                'Nhóm KH VIP3',
+                'Nhóm KH VIP5',
+                'Nhóm KH VIPSI',
+                'Nhóm KH CH Lẻ',
+                'Nhóm KH Kênh ON',
+                'Thực Hiện Ngày',
+                'MTD',
+                'Phát sinh Ngày (OFF)',
+                'MTD (OFF)',
+                'Phát sinh Ngày (ON)',
+                'MTD (ON)',
+                'Chỉ Tiêu KPI',
+                'Target (OFF)',
+                'Target (ON)',
+            ]
+            else 'right'
+        )
+        if col in ['Chỉ Tiêu Doanh Số', 'Doanh Số MTD', 'Thực Hiện Ngày']:
+          align = 'right'
+        html.append(
+            f'<td style="text-align: {align}; white-space: nowrap;">{val}</td>'
+        )
+    html.append('</tr>')
+  html.append('</tbody>')
+  html.append('</table></div>')
+  return ''.join(html)
+
+
+# ====================== GIAO DIỆN ======================
+st.markdown(
+    f"""
+<div class="main-header">
+    <div class="logo">{logo_svg}</div>
+    <div class="title-block">
+        <h1>SƯ ĐOÀN HCM4 - TRUNG ĐOÀN 11</h1>
+        <h2>TRACKING KPI ĐDKD - TEAM SS NGUYỄN THỊ TƯỜNG VY </h2>
+    </div>
+</div>
+""",
+    unsafe_allow_html=True,
+)
+
+col_reload, col_empty = st.columns([2, 5])
+with col_reload:
+  if st.button('🔄 Xóa Cache & Reload Dữ Liệu'):
+    st.cache_data.clear()
+    st.rerun()
+
+with st.spinner('Đang tải dữ liệu...'):
+  df, mcp = load_main_data()
+  targets = get_targets()
+  turnover_targets = get_turnover_targets()
+  df_cat = load_cat_data()
+  df_brand = load_brand_data()
+  df_combo_off, df_combo_on = load_combo_data()
+
+  mcp = process_mcp_sales(df, mcp)
+  df_cat = process_cat_sales(df, df_cat)
+  df_brand = process_brand_sales(df, df_brand)
+
+nv_list = sorted(df['Tên NVBH'].dropna().unique().tolist())
+
+vn_time = dt.datetime.utcnow() + dt.timedelta(hours=7)
+default_date_t_minus_1 = (vn_time - timedelta(days=1)).date()
+
+
+def get_timegone_stats(target_date):
+  year = target_date.year
+  month = target_date.month
+  first_day = dt.date(year, month, 1)
+  if month == 12:
+    last_day = dt.date(year + 1, 1, 1) - timedelta(days=1)
+  else:
+    last_day = dt.date(year, month + 1, 1) - timedelta(days=1)
+
+  total_working_days = 0
+  elapsed_working_days = 0
+
+  curr = first_day
+  while curr <= last_day:
+    is_sunday = curr.weekday() == 6
+    is_holiday = month == 9 and curr.day in [1, 2]
+
+    if not is_sunday and not is_holiday:
+      total_working_days += 1
+      if curr <= target_date:
+        elapsed_working_days += 1
+    curr += timedelta(days=1)
+
+  remaining_working_days = total_working_days - elapsed_working_days
+  pct_timegone = (
+      round(elapsed_working_days / total_working_days * 100, 1)
+      if total_working_days > 0
+      else 0
+  )
+  return (
+      total_working_days,
+      elapsed_working_days,
+      remaining_working_days,
+      pct_timegone,
+  )
+
+
+tot_days, elapsed_days, remain_days, pct_tg = get_timegone_stats(
+    default_date_t_minus_1
+)
+
+st.markdown(
+    f"""
+<div class="timegone-container" style="background: #f7fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 12px; margin: 5px 0 12px 0; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+    <div class="timegone-title" style="font-weight: 800; color: #1a365d; font-size: 12.5px; margin-bottom: 6px;">⏳ TIẾN ĐỘ THỜI GIAN THÁNG {default_date_t_minus_1.strftime('%m/%Y')}</div>
+    <div class="timegone-grid" style="display: flex; justify-content: space-around; font-size: 11.5px; gap: 6px; flex-wrap: wrap;">
+        <div class="timegone-item" style="background: #fff; padding: 3px 8px; border-radius: 4px; border: 1px solid #edf2f7;"><b>Tổng làm việc:</b> <span style="color: #2b6cb0; font-weight: 700;">{tot_days}</span></div>
+        <div class="timegone-item" style="background: #fff; padding: 3px 8px; border-radius: 4px; border: 1px solid #edf2f7;"><b>Đã trôi qua:</b> <span style="color: #c53030; font-weight: 700;">{elapsed_days}</span></div>
+        <div class="timegone-item" style="background: #fff; padding: 3px 8px; border-radius: 4px; border: 1px solid #edf2f7;"><b>Còn lại:</b> <span style="color: #2f855a; font-weight: 700;">{remain_days}</span></div>
+        <div class="timegone-item" style="background: #c6f6d5; padding: 3px 8px; border-radius: 4px; border: 1px solid #9ae6b4; color: #22543d;"><b>% Timegone:</b> <span style="font-weight: 800;">{pct_tg}%</span></div>
+    </div>
+</div>
+""",
+    unsafe_allow_html=True,
+)
+
+# Bộ lọc chính
+f1, f2, f3 = st.columns([1, 1, 1.3])
+with f1:
+  st.markdown('<p class="filter-label">MONTH</p>', unsafe_allow_html=True)
+  st.selectbox(
+      '', ['Tháng 09/2026'], key='month', label_visibility='collapsed'
+  )
+with f2:
+  st.markdown('<p class="filter-label">NGÀY</p>', unsafe_allow_html=True)
+  report_date = st.date_input(
+      '', value=default_date_t_minus_1, key='ngay', label_visibility='collapsed'
+  )
+with f3:
+  st.markdown('<p class="filter-label">KPI NAME</p>', unsafe_allow_html=True)
+  kpi_map = {
+      '1. ASO FOCUS CHANTÉ': 'CHANTE',
+      '2. ASO FOCUS OMC TRỘN': 'OMACHI',
+      '3. ASO TEA KÊNH ON': 'ASO_TEA',
+      '4. PC BT (PC 4LINE - BEER)': 'PC_BT',
+      '5. ASO ALL': 'ASO_ALL',
+      '6. ASO ACTIVE KÊNH ON': 'PC_ON',
+      '7. BÁO CÁO ĐH COMBO': 'COMBO',
+      '8. BÁO CÁO DOANH SỐ TURNOVER': 'TURNOVER',
+      '9. BÁO CÁO TỔNG HỢP': 'SUMMARY',
+      '10. BÁO CÁO LỊCH VIẾNG THĂM': 'VISIT',
+  }
+  selected_name = st.selectbox(
+      '', list(kpi_map.keys()), key='kpi', label_visibility='collapsed'
+  )
+  selected_kpi = kpi_map[selected_name]
+
+f4, f5 = st.columns([1, 1])
+with f4:
+  st.markdown('<p class="filter-label">SALE SUP</p>', unsafe_allow_html=True)
+  st.selectbox(
+      '', ['Nguyễn Thị Tường Vy Total'], key='sup', label_visibility='collapsed'
+  )
+with f5:
+  st.markdown(
+      '<p class="filter-label">ĐDKD (Nhân viên)</p>', unsafe_allow_html=True
+  )
+  filter_nv = st.selectbox(
+      '',
+      ['Tất cả ĐDKD'] + nv_list,
+      key='ddkd',
+      label_visibility='collapsed',
+  )
+
+st.markdown('---')
+
+tab_kpi, tab_mcp, tab_cat, tab_brand, tab_dskh_off, tab_dskh_on = st.tabs([
+    '📊 BÁO CÁO KPI',
+    '🗺️ MCP VISIT',
+    '📦 TRACKING MBS - CAT',
+    '🏷️ TRACKING MBS - BRAND',
+    '📋 DSKH_Combo OFF',
+    '📋 DSKH_Combo ON',
+])
+
+# ----- TAB KPI -----
+with tab_kpi:
+  if selected_kpi == 'SUMMARY':
+    saved_sum_thu = st.query_params.get('sum_thu', '')
+    default_sum_thu_list = (
+        [x.strip() for x in saved_sum_thu.split(',') if x.strip()]
+        if saved_sum_thu
+        else []
+    )
+
+    if not default_sum_thu_list and report_date:
+      wday = report_date.weekday()
+      if wday in [0, 3]:
+        default_sum_thu_list = ['25']
+      elif wday in [1, 4]:
+        default_sum_thu_list = ['36']
+      elif wday in [2, 5]:
+        default_sum_thu_list = ['47']
+
+    def update_sum_params():
+      st.query_params['sum_thu'] = (
+          ','.join(st.session_state.sum_thu_input)
+          if st.session_state.sum_thu_input
+          else ''
+      )
+
+    col_f_thu, col_f_metrics = st.columns([1, 1.5])
+    with col_f_thu:
+      st.markdown(
+          '<p class="filter-label">📅 Lọc Theo Thứ / Chu kỳ (Chọn nhiều)</p>',
+          unsafe_allow_html=True,
+      )
+      thu_opts = ['2', '3', '4', '5', '6', '7', '25', '36', '47']
+      valid_sum_thu = [t for t in default_sum_thu_list if t in thu_opts]
+      f_thu_sum = st.multiselect(
+          '',
+          thu_opts,
+          default=valid_sum_thu,
+          key='sum_thu_input',
+          on_change=update_sum_params,
+          label_visibility='collapsed',
+      )
+
+    with col_f_metrics:
+      st.markdown(
+          '<p class="filter-label">📊 Chọn Chỉ Số Hiển Thị</p>',
+          unsafe_allow_html=True,
+      )
+      metric_opts = [
+          'VIP MCH',
+          'KH Combo OFF',
+          'KH Combo ON',
+          'MBS Cat',
+          'MBS Brand',
+      ]
+      saved_metrics = st.query_params.get('sum_metrics', '')
+      default_metrics = (
+          [x.strip() for x in saved_metrics.split(',') if x.strip()]
+          if saved_metrics
+          else metric_opts
+      )
+      valid_metrics = [m for m in default_metrics if m in metric_opts]
+      if not valid_metrics:
+        valid_metrics = metric_opts
+
+      def update_metric_params():
+        st.query_params['sum_metrics'] = (
+            ','.join(st.session_state.sum_metrics_input)
+            if st.session_state.sum_metrics_input
+            else ''
+        )
+
+      selected_metrics = st.multiselect(
+          '',
+          metric_opts,
+          default=valid_metrics,
+          key='sum_metrics_input',
+          on_change=update_metric_params,
+          label_visibility='collapsed',
+      )
+      if not selected_metrics:
+        selected_metrics = metric_opts
+
+    st.query_params['sum_thu'] = (
+        ','.join(st.session_state.sum_thu_input)
+        if st.session_state.sum_thu_input
+        else ''
+    )
+    st.query_params['sum_metrics'] = ','.join(selected_metrics)
+
+    df_summary = build_summary_report(
+        df,
+        report_date,
+        df_combo_off,
+        df_combo_on,
+        df_cat,
+        df_brand,
+        mcp,
+        filter_nv,
+        f_thu_sum,
+    )
+    tot_row_s = df_summary.iloc[-1]
+
+    st.markdown(
+        f'<h3 style="color: #034ea2; font-weight: 800; margin-bottom: 0px;'
+        f' font-size: 15px;">9. BÁO CÁO TỔNG HỢP - THÁNG'
+        f' {report_date.strftime("%m/%Y")}</h3>',
+        unsafe_allow_html=True,
+    )
+    st.caption(
+        f"⚡ Ngày: {report_date.strftime('%d/%m/%Y')} | Lọc NV: {filter_nv} |"
+        f" Lọc Thứ/Chu kỳ: {f_thu_sum if f_thu_sum else 'Tất cả'}"
+    )
+
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+      render_metric_card('Tổng VIP MCH', f"{tot_row_s['VIP MCH']:,}")
+    with c2:
+      render_metric_card(
+          'Tổng KH Combo OFF', f"{tot_row_s['KH Combo OFF']:,}"
+      )
+    with c3:
+      render_metric_card(
+          'Tổng KH Combo ON', f"{tot_row_s['KH Combo ON']:,}"
+      )
+    with c4:
+      render_metric_card(
+          'Tổng MBS Cat / Brand',
+          f"{tot_row_s['MBS Cat']:,} / {tot_row_s['MBS Brand']:,}",
+      )
+
+    st.markdown(
+        render_summary_html_table(df_summary, selected_metrics),
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        f"""
+        <div class="note-box">
+            <div style="font-weight: 800; color: #034ea2; margin-bottom: 8px; font-size: 13.5px;">NHẬN XÉT & ĐÁNH GIÁ BÁO CÁO TỔNG HỢP:</div>
+            <ul style="margin: 0; padding-left: 18px; line-height: 1.6;">
+                <li><b>Kết Quả Tổng Quan:</b> Tổng số lượng cửa hàng VIP (VIP3, VIP5, VIPSI) toàn đội đạt <b>{tot_row_s['VIP MCH']:,} cửa hàng</b> (Đã mua: {tot_row_s['Đã Mua (VIP)']:,}).</li>
+                <li><b>Chương Trình Combo & MBS:</b> Tổng KH tham gia Combo OFF: <b>{tot_row_s['KH Combo OFF']:,} CH</b> (Đã mua: {tot_row_s['Đã Mua (OFF)']:,}) | Combo ON: <b>{tot_row_s['KH Combo ON']:,} CH</b> (Đã mua: {tot_row_s['Đã Mua (ON)']:,}). MBS Category: <b>{tot_row_s['MBS Cat']:,} CH</b> | MBS Brand: <b>{tot_row_s['MBS Brand']:,} CH</b>.</li>
+                <li><b>Đề Xuất Hành Động:</b> Tiếp tục bám sát lịch tuyến, đẩy mạnh các nhóm cửa hàng chưa phát sinh và đôn đốc các ĐDKD hoàn thành toàn diện các chỉ tiêu trong tháng {report_date.strftime('%m/%Y')}.</li>
+            </ul>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+  elif selected_kpi == 'VISIT':
+    saved_visit_thu = st.query_params.get('visit_thu', '')
+    default_visit_thu_list = (
+        [x.strip() for x in saved_visit_thu.split(',') if x.strip()]
+        if saved_visit_thu
+        else []
+    )
+
+    def update_visit_params():
+      st.query_params['visit_thu'] = (
+          ','.join(st.session_state.visit_thu_input)
+          if st.session_state.visit_thu_input
+          else ''
+      )
+
+    col_f_thu_v, _ = st.columns([1, 1.5])
+    with col_f_thu_v:
+      st.markdown(
+          '<p class="filter-label">📅 Lọc Theo Thứ / Chu kỳ Viếng Thăm (Chọn'
+          ' nhiều)</p>',
+          unsafe_allow_html=True,
+      )
+      thu_opts = ['2', '3', '4', '5', '6', '7', '25', '36', '47']
+      valid_visit_thu = [t for t in default_visit_thu_list if t in thu_opts]
+      f_thu_visit = st.multiselect(
+          '',
+          thu_opts,
+          default=valid_visit_thu,
+          key='visit_thu_input',
+          on_change=update_visit_params,
+          label_visibility='collapsed',
+      )
+
+    st.query_params['visit_thu'] = (
+        ','.join(st.session_state.visit_thu_input)
+        if st.session_state.visit_thu_input
+        else ''
+    )
+
+    (
+        df_visit,
+        v3_m,
+        v3_t,
+        v5_m,
+        v5_t,
+        vsi_m,
+        vsi_t,
+        le_m,
+        le_t,
+        on_m,
+        on_t,
+        title_v,
+    ) = build_visit_report(mcp, df, report_date, filter_nv, f_thu_visit)
+
+    weekday_map = {
+        0: 'THỨ HAI',
+        1: 'THỨ BA',
+        2: 'THỨ TƯ',
+        3: 'THỨ NĂM',
+        4: 'THỨ SÁU',
+        5: 'THỨ BẢY',
+        6: 'CHỦ NHẬT',
+    }
+    wname = weekday_map.get(report_date.weekday(), '')
+
+    st.markdown(
+        f'<h3 style="color: #034ea2; font-weight: 800; margin-bottom: 2px;'
+        f' font-size: 16px; text-align: center;">BÁO CÁO LỊCH VIẾNG THĂM & % ACTIVE'
+        f' {wname} - {report_date.strftime("%d/%m/%Y")}</h3>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        f'<p style="text-align: center; font-size: 12px; color: #4a5568;'
+        f' margin-bottom: 12px;">Dữ liệu cập nhật {wname} ngày'
+        f' {report_date.strftime("%d/%m/%Y")} | Kèm tỷ lệ % Active (Đã mua / Tổng'
+        ' KH)</p>',
+        unsafe_allow_html=True,
+    )
+
+    c1, c2, c3, c4, c5 = st.columns(5)
+    with c1:
+      p3 = round(v3_m / v3_t * 100, 1) if v3_t else 0
+      render_metric_card('VIP 3', f'{v3_m} / {v3_t} ({p3}%)')
+    with c2:
+      p5 = round(v5_m / v5_t * 100, 1) if v5_t else 0
+      render_metric_card('VIP 5', f'{v5_m} / {v5_t} ({p5}%)')
+    with c3:
+      psi = round(vsi_m / vsi_t * 100, 1) if vsi_t else 0
+      render_metric_card('VIPSI', f'{vsi_m} / {vsi_t} ({psi}%)')
+    with c4:
+      ple = round(le_m / le_t * 100, 1) if le_t else 0
+      render_metric_card('LẺ', f'{le_m} / {le_t} ({ple}%)')
+    with c5:
+      pon = round(on_m / on_t * 100, 1) if on_t else 0
+      render_metric_card('ON', f'{on_m} / {on_t} ({pon}%)')
+
+    st.markdown(render_visit_html_table(df_visit), unsafe_allow_html=True)
+
+    st.markdown(
+        f"""
+        <div class="note-box">
+            <div style="font-weight: 800; color: #034ea2; margin-bottom: 8px; font-size: 13.5px;">NHẬN XÉT & ĐÁNH GIÁ LỊCH VIẾNG THĂM {wname}:</div>
+            <ul style="margin: 0; padding-left: 18px; line-height: 1.6;">
+                <li><b>Kết Quả Thực Hiện:</b> Theo dõi sát sao tỷ lệ mua hàng thực tế (Active) so với lịch tuyến viếng thăm trong ngày {report_date.strftime('%d/%m/%Y')}.</li>
+                <li><b>Trọng Tâm Vận Hành:</b> Ưu tiên bám sát các nhóm cửa hàng VIP và Kênh ON Premise để đảm bảo đạt chuẩn bao phủ và tối ưu sản lượng.</li>
+                <li><b>Đề Xuất Hành Động:</b> SS đồng hành cùng các ĐDKD đi thị trường (Field Coaching) trực tiếp tại các tuyến có tỷ lệ active chưa đạt yêu cầu.</li>
+            </ul>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+  elif selected_kpi == 'TURNOVER':
+    df_r, team_tgt, title = build_turnover_report(
+        df, report_date, turnover_targets, filter_nv
+    )
+    total_row = df_r.iloc[-1]
+    total_mtd = float(total_row['Doanh Số MTD'])
+    total_today = float(total_row['Thực Hiện Ngày'])
+    pct_team = total_row['% MTD']
+
+    st.markdown(
+        f'<h3 style="color: #034ea2; font-weight: 800; margin-bottom: 0px;'
+        f' font-size: 15px;">{title} - THÁNG'
+        f' {report_date.strftime("%m/%Y")}</h3>',
+        unsafe_allow_html=True,
+    )
+    st.caption(
+        f"⚡ Ngày: {report_date.strftime('%d/%m/%Y')} | Lọc: {filter_nv}"
+    )
+
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+      render_metric_card(
+          '🎯 Chỉ Tiêu DS', f"{team_tgt:,.0f}".replace(',', '.')
+      )
+    with c2:
+      render_metric_card(
+          '📈 Doanh Số MTD', f"{total_mtd:,.0f}".replace(',', '.')
+      )
+    with c3:
+      render_metric_card('📊 % MTD', pct_team)
+    with c4:
+      render_metric_card(
+          '🆕 Thực Hiện Ngày', f"{total_today:,.0f}".replace(',', '.')
+      )
+
+    df_display = df_r.copy()
+    for col in ['Chỉ Tiêu Doanh Số', 'Thực Hiện Ngày', 'Doanh Số MTD']:
+      df_display[col] = df_display[col].apply(
+          lambda x: f'{x:,.0f}'.replace(',', '.')
+          if isinstance(x, (int, float)) and x > 0
+          else ('0' if x == 0 else x)
+      )
+
+    st.markdown(render_html_table(df_display), unsafe_allow_html=True)
+
+    df_eval = df_r.iloc[:-1].copy()
+    df_eval['_pct_val'] = (
+        df_eval['% MTD'].str.replace('%', '').astype(float)
+    )
+    df_sorted_pct = df_eval.sort_values(by='_pct_val', ascending=False)
+    top3 = df_sorted_pct.head(3)
+    bottom3 = df_sorted_pct.tail(3).iloc[::-1]
+
+    top3_text = ', '.join(
+        [f"{r['Tên NVBH']} ({r['% MTD']})" for _, r in top3.iterrows()]
+    )
+    bottom3_text = ', '.join(
+        [f"{r['Tên NVBH']} ({r['% MTD']})" for _, r in bottom3.iterrows()]
+    )
+
+    st.markdown(
+        f"""
+        <div class="note-box">
+            <div style="font-weight: 800; color: #034ea2; margin-bottom: 8px; font-size: 13.5px;">NHẬN XÉT & ĐÁNH GIÁ {title}:</div>
+            <ul style="margin: 0; padding-left: 18px; line-height: 1.6;">
+                <li><b>Kết Quả Thực Hiện:</b> Đạt {total_mtd:,.0f} / {team_tgt:,.0f} VNĐ ({pct_team} MTD). Thực hiện ngày: {total_today:,.0f} VNĐ.</li>
+                <li><b>Top 3 ĐDKD Dẫn Đầu:</b> {top3_text}.</li>
+                <li><b>Bottom 3 ĐDKD Cần Cải Thiện:</b> {bottom3_text}.</li>
+                <li><b>Đề Xuất Hành Động Cho 3 Bạn Bottom:</b> Tập trung rà soát doanh số khách hàng trọng điểm, thúc đẩy đơn hàng lớn và SS hỗ trợ trực tiếp tại tuyến.</li>
+            </ul>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+  elif selected_kpi != 'COMBO':
+    df_r, team_tgt, title = build_report(
+        df, report_date, targets, selected_kpi, filter_nv, mcp_df=mcp
+    )
+    total_row = df_r.iloc[-1]
+    total_mtd = int(total_row['MTD'])
+    total_ngay = int(total_row['Thực Hiện Ngày'])
+    pct_team = total_row['% MTD']
+    st.markdown(
+        f'<h3 style="color: #034ea2; font-weight: 800; margin-bottom: 0px;'
+        f' font-size: 15px;">{title} - THÁNG'
+        f' {report_date.strftime("%m/%Y")}</h3>',
+        unsafe_allow_html=True,
+    )
+    st.caption(
+        f"⚡ Ngày: {report_date.strftime('%d/%m/%Y')} | Lọc: {filter_nv}"
+    )
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+      render_metric_card('🎯 Target', f'{team_tgt:,}')
+    with c2:
+      render_metric_card('📈 MTD', f'{total_mtd:,}')
+    with c3:
+      render_metric_card('📊 % MTD', pct_team)
+    with c4:
+      render_metric_card('🆕 Ngày', f'+{total_ngay}')
+    st.markdown(render_html_table(df_r), unsafe_allow_html=True)
+    df_eval = df_r.iloc[:-1].copy()
+    df_eval['_pct_val'] = (
+        df_eval['% MTD'].str.replace('%', '').astype(float)
+    )
+
+    df_sorted_pct = df_eval.sort_values(by='_pct_val', ascending=False)
+    top3 = df_sorted_pct.head(3)
+    bottom3 = df_sorted_pct.tail(3).iloc[::-1]
+
+    top3_text = ', '.join(
+        [f"{r['Tên NVBH']} ({r['% MTD']})" for _, r in top3.iterrows()]
+    )
+    bottom3_text = ', '.join(
+        [f"{r['Tên NVBH']} ({r['% MTD']})" for _, r in bottom3.iterrows()]
+    )
+    st.markdown(
+        f"""
+        <div class="note-box">
+            <div style="font-weight: 800; color: #034ea2; margin-bottom: 8px; font-size: 13.5px;">NHẬN XÉT & ĐÁNH GIÁ CHỈ SỐ {title.upper()}:</div>
+            <ul style="margin: 0; padding-left: 18px; line-height: 1.6;">
+                <li><b>Kết Quả Thực Hiện:</b> Đạt {total_mtd:,} / {team_tgt:,} ({pct_team} MTD). Phát sinh ngày: +{total_ngay}.</li>
+                <li><b>Top 3 ĐDKD Dẫn Đầu:</b> {top3_text}.</li>
+                <li><b>Bottom 3 ĐDKD Cần Cải Thiện:</b> {bottom3_text}.</li>
+                <li><b>Đề Xuất Hành Động Cho 3 Bạn Bottom:</b> Tập trung rà soát tuyến chưa mua, đẩy mạnh combo kích cầu và SS đồng hành đi thị trường (Field Coaching) trong 2 ngày tới.</li>
+            </ul>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+  else:
+    df_combo, target_off_total, target_on_total = build_combo_matrix(
+        df, report_date, df_combo_off, df_combo_on, filter_nv
+    )
+    total_row = df_combo.iloc[-1]
+    total_off = int(total_row['MTD (OFF)'])
+    total_on = int(total_row['MTD (ON)'])
+    ngay_off = int(total_row['Phát sinh Ngày (OFF)'])
+    ngay_on = int(total_row['Phát sinh Ngày (ON)'])
+
+    pct_off_team = (
+        round(total_off / target_off_total * 100, 1)
+        if target_off_total
+        else 0
+    )
+    pct_on_team = (
+        round(total_on / target_on_total * 100, 1) if target_on_total else 0
+    )
+
+    st.markdown(
+        f'<h3 style="color: #034ea2; font-weight: 800; margin-bottom: 0px;'
+        f' font-size: 15px;">7. BÁO CÁO ĐH COMBO (MATRIX OFF/ON) - THÁNG'
+        f' {report_date.strftime("%m/%Y")}</h3>',
+        unsafe_allow_html=True,
+    )
+    st.caption(
+        f"⚡ Ngày: {report_date.strftime('%d/%m/%Y')} | Lọc: {filter_nv} | Target"
+        f' OFF: {target_off_total} CH | Target ON: {target_on_total} CH'
+    )
+
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+      render_metric_card(
+          'MTD OFF / Target',
+          f'{total_off:,} / {target_off_total:,} ({pct_off_team}%)',
+      )
+    with c2:
+      render_metric_card(
+          'MTD ON / Target',
+          f'{total_on:,} / {target_on_total:,} ({pct_on_team}%)',
+      )
+    with c3:
+      render_metric_card('Phát sinh Ngày (OFF)', f'+{ngay_off}')
+    with c4:
+      render_metric_card('Phát sinh Ngày (ON)', f'+{ngay_on}')
+
+    df_eval_off = df_combo.iloc[:-1].copy()
+    df_eval_off['_pct_val_off'] = (
+        df_eval_off['% MTD (OFF)'].str.replace('%', '').astype(float)
+    )
+    df_sorted_off = df_eval_off.sort_values(
+        by='_pct_val_off', ascending=False
+    )
+    top3_off = df_sorted_off.head(3)
+    bottom3_off = df_sorted_off.tail(3).iloc[::-1]
+
+    top3_off_text = ', '.join(
+        [f"{r['Tên NVBH']} ({r['% MTD (OFF)']})" for _, r in top3_off.iterrows()]
+    )
+    bottom3_off_text = ', '.join(
+        [
+            f"{r['Tên NVBH']} ({r['% MTD (OFF)']})"
+            for _, r in bottom3_off.iterrows()
+        ]
+    )
+
+    st.markdown(render_html_table(df_combo), unsafe_allow_html=True)
+    st.markdown(
+        f"""
+        <div class="note-box">
+            <div style="font-weight: 800; color: #034ea2; margin-bottom: 8px; font-size: 13.5px;">NHẬN XÉT & ĐÁNH GIÁ BÁO CÁO ĐH COMBO (MATRIX OFF/ON):</div>
+            <ul style="margin: 0; padding-left: 18px; line-height: 1.6;">
+                <li><b>Kết Quả Thực Hiện:</b> Kênh OFF đạt <b>{total_off:,} / {target_off_total:,} CH ({pct_off_team}%)</b> (Phát sinh ngày: +{ngay_off} CH) | Kênh ON đạt <b>{total_on:,} / {target_on_total:,} CH ({pct_on_team}%)</b> (Phát sinh ngày: +{ngay_on} CH).</li>
+                <li><b>Top 3 ĐDKD Dẫn Đầu (OFF):</b> {top3_off_text}.</li>
+                <li><b>Bottom 3 ĐDKD Cần Cải Thiện (OFF):</b> {bottom3_off_text}.</li>
+                <li><b>Đề Xuất Hành Động Cho 3 Bạn Bottom:</b> Tập trung rà soát các cửa hàng trong danh sách combo chưa phát sinh đơn hàng, kiểm tra trưng bày sản phẩm và kích hoạt chương trình khuyến mại đẩy mạnh doanh số.</li>
+            </ul>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+# Các hàm cập nhật query params cho các tab khác
+def update_mcp_params():
+  st.query_params['mcp_nv'] = (
+      ','.join(st.session_state.mcp_nv_input)
+      if st.session_state.mcp_nv_input
+      else ''
+  )
+  st.query_params['mcp_thu'] = (
+      ','.join(st.session_state.mcp_thu_input)
+      if st.session_state.mcp_thu_input
+      else ''
+  )
+  st.query_params['mcp_ma'] = st.session_state.mcp_ma_input
+  st.query_params['mcp_ten'] = st.session_state.mcp_ten_input
+  st.query_params['mcp_vip'] = (
+      ','.join(st.session_state.mcp_vip_input)
+      if st.session_state.mcp_vip_input
+      else ''
+  )
+  st.query_params['mcp_ds'] = (
+      ','.join(st.session_state.mcp_ds_input)
+      if st.session_state.mcp_ds_input
+      else ''
+  )
+
+
+def update_cat_params():
+  st.query_params['cat_nv'] = (
+      ','.join(st.session_state.cat_nv_input)
+      if st.session_state.cat_nv_input
+      else ''
+  )
+  st.query_params['cat_thu'] = (
+      ','.join(st.session_state.cat_thu_input)
+      if st.session_state.cat_thu_input
+      else ''
+  )
+  st.query_params['cat_ma'] = st.session_state.cat_ma_input
+  st.query_params['cat_ten'] = st.session_state.cat_ten_input
+
+
+def update_brand_params():
+  st.query_params['brand_nv'] = (
+      ','.join(st.session_state.brand_nv_input)
+      if st.session_state.brand_nv_input
+      else ''
+  )
+  st.query_params['brand_thu'] = (
+      ','.join(st.session_state.brand_thu_input)
+      if st.session_state.brand_thu_input
+      else ''
+  )
+  st.query_params['brand_ma'] = st.session_state.brand_ma_input
+  st.query_params['brand_ten'] = st.session_state.brand_ten_input
+
+
+def update_off_params():
+  st.query_params['off_nv'] = (
+      ','.join(st.session_state.off_nv_input)
+      if st.session_state.off_nv_input
+      else ''
+  )
+  st.query_params['off_thu'] = (
+      ','.join(st.session_state.off_thu_input)
+      if st.session_state.off_thu_input
+      else ''
+  )
+  st.query_params['off_ma'] = st.session_state.off_ma_input
+  st.query_params['off_ten'] = st.session_state.off_ten_input
+
+
+def update_on_params():
+  st.query_params['on_nv'] = (
+      ','.join(st.session_state.on_nv_input)
+      if st.session_state.on_nv_input
+      else ''
+  )
+  st.query_params['on_thu'] = (
+      ','.join(st.session_state.on_thu_input)
+      if st.session_state.on_thu_input
+      else ''
+  )
+  st.query_params['on_ma'] = st.session_state.on_ma_input
+  st.query_params['on_ten'] = st.session_state.on_ten_input
+
+
+# ----- TAB MCP -----
+with tab_mcp:
+  st.markdown(
+      '<h3 style="color: #034ea2; font-weight: 800; margin-bottom: 0px;'
+      ' font-size: 15px;">🗺️ MCP VISIT & MAPPING DOANH SỐ BÁN HÀNG</h3>',
+      unsafe_allow_html=True,
+  )
+  if mcp.empty:
+    st.warning('Chưa có dữ liệu MCP')
+  else:
+    col_nv = find_col(
+        mcp,
+        [
+            'SM name',
+            'SM Name',
+            'Tên NVBH',
+            'Nhân viên',
+            'Sale name',
+            'Position name',
+        ],
+    )
+    col_ma = find_col(
+        mcp, ['Outlet_code', 'Outlet Code', 'Mã CH', 'Mã khách hàng', 'Poscode']
+    )
+    col_ten = find_col(
+        mcp, ['Outlet_name', 'Outlet Name', 'Tên CH', 'Tên khách hàng']
+    )
+    col_thu = find_col(mcp, ['Thứ', 'Frequency', 'Tần suất'])
+    col_vip = find_col(mcp, ['VIP MCH', 'VIP_MCH'])
+    col_ds = find_col(
+        mcp, ['Doanh Số MTD', 'Doanh số MTD', 'Doanh_so_MTD']
+    )
+
+    saved_mcp_nv = st.query_params.get('mcp_nv', '')
+    default_nv_list = (
+        [x.strip() for x in saved_mcp_nv.split(',') if x.strip()]
+        if saved_mcp_nv
+        else []
+    )
+
+    saved_mcp_thu = st.query_params.get('mcp_thu', '')
+    default_thu_list = (
+        [x.strip() for x in saved_mcp_thu.split(',') if x.strip()]
+        if saved_mcp_thu
+        else []
+    )
+
+    saved_mcp_ma = st.query_params.get('mcp_ma', '')
+    saved_mcp_ten = st.query_params.get('mcp_ten', '')
+
+    saved_mcp_vip = st.query_params.get('mcp_vip', '')
+    default_vip_list = (
+        [x.strip() for x in saved_mcp_vip.split(',') if x.strip()]
+        if saved_mcp_vip
+        else []
+    )
+
+    saved_mcp_ds = st.query_params.get('mcp_ds', '')
+    default_ds_list = (
+        [x.strip() for x in saved_mcp_ds.split(',') if x.strip()]
+        if saved_mcp_ds
+        else []
+    )
+
+    c1, c2 = st.columns(2)
+    with c1:
+      st.markdown(
+          '<p class="filter-label">👤 Lọc Nhân Viên (ĐDKD - Chọn nhiều)</p>',
+          unsafe_allow_html=True,
+      )
+      nv_opts = (
+          sorted(mcp[col_nv].dropna().astype(str).unique().tolist())
+          if col_nv
+          else []
+      )
+      valid_default_nv = [v for v in default_nv_list if v in nv_opts]
+      f_nv = st.multiselect(
+          '',
+          nv_opts,
+          default=valid_default_nv,
+          key='mcp_nv_input',
+          on_change=update_mcp_params,
+          label_visibility='collapsed',
+      )
+    with c2:
+      st.markdown(
+          '<p class="filter-label">📅 Lọc Theo Thứ (Chọn nhiều)</p>',
+          unsafe_allow_html=True,
+      )
+      thu_opts = ['2', '3', '4', '5', '6', '7', '25', '36', '47']
+      valid_default_thu = [t for t in default_thu_list if t in thu_opts]
+      f_thu = st.multiselect(
+          '',
+          thu_opts,
+          default=valid_default_thu,
+          key='mcp_thu_input',
+          on_change=update_mcp_params,
+          label_visibility='collapsed',
+      )
+
+    c3, c4 = st.columns(2)
+    with c3:
+      st.markdown(
+          '<p class="filter-label">🆔 Lọc Mã Khách Hàng</p>',
+          unsafe_allow_html=True,
+      )
+      f_ma = st.text_input(
+          '',
+          value=saved_mcp_ma,
+          key='mcp_ma_input',
+          on_change=update_mcp_params,
+          label_visibility='collapsed',
+      )
+    with c4:
+      st.markdown(
+          '<p class="filter-label">🏪 Lọc Tên Khách Hàng</p>',
+          unsafe_allow_html=True,
+      )
+      f_ten = st.text_input(
+          '',
+          value=saved_mcp_ten,
+          key='mcp_ten_input',
+          on_change=update_mcp_params,
+          label_visibility='collapsed',
+      )
+
+    c5, c6 = st.columns(2)
+    with c5:
+      st.markdown(
+          '<p class="filter-label">⭐ Lọc VIP MCH (Chọn nhiều)</p>',
+          unsafe_allow_html=True,
+      )
+      vip_opts = (
+          sorted(mcp[col_vip].dropna().astype(str).unique().tolist())
+          if col_vip
+          else []
+      )
+      valid_default_vip = [v for v in default_vip_list if v in vip_opts]
+      f_vip = st.multiselect(
+          '',
+          vip_opts,
+          default=valid_default_vip,
+          key='mcp_vip_input',
+          on_change=update_mcp_params,
+          label_visibility='collapsed',
+      )
+    with c6:
+      st.markdown(
+          '<p class="filter-label">💰 Lọc Doanh Số MTD Thực Tế (Chọn'
+          ' nhiều)</p>',
+          unsafe_allow_html=True,
+      )
+      if col_ds:
+        raw_ds_vals = sorted(mcp[col_ds].dropna().unique().tolist())
+        ds_opts = [format_number_vn(v) for v in raw_ds_vals]
+      else:
+        ds_opts = []
+      valid_default_ds = [d for d in default_ds_list if d in ds_opts]
+      f_ds = st.multiselect(
+          '',
+          ds_opts,
+          default=valid_default_ds,
+          key='mcp_ds_input',
+          on_change=update_mcp_params,
+          label_visibility='collapsed',
+      )
+
+    st.query_params['mcp_nv'] = (
+        ','.join(st.session_state.mcp_nv_input)
+        if st.session_state.mcp_nv_input
+        else ''
+    )
+    st.query_params['mcp_thu'] = (
+        ','.join(st.session_state.mcp_thu_input)
+        if st.session_state.mcp_thu_input
+        else ''
+    )
+    st.query_params['mcp_ma'] = st.session_state.mcp_ma_input
+    st.query_params['mcp_ten'] = st.session_state.mcp_ten_input
+    st.query_params['mcp_vip'] = (
+        ','.join(st.session_state.mcp_vip_input)
+        if st.session_state.mcp_vip_input
+        else ''
+    )
+    st.query_params['mcp_ds'] = (
+        ','.join(st.session_state.mcp_ds_input)
+        if st.session_state.mcp_ds_input
+        else ''
+    )
+
+    df_f = mcp.copy()
+    if f_nv and col_nv:
+      df_f = df_f[df_f[col_nv].astype(str).isin(f_nv)]
+    if f_ma and col_ma:
+      df_f = df_f[
+          df_f[col_ma].astype(str).str.contains(f_ma, case=False, na=False)
+      ]
+    if f_ten and col_ten:
+      df_f = df_f[
+          df_f[col_ten].astype(str).str.contains(f_ten, case=False, na=False)
+      ]
+    if f_vip and col_vip:
+      df_f = df_f[df_f[col_vip].astype(str).isin(f_vip)]
+
+    if f_ds and col_ds:
+      formatted_col_ds = df_f[col_ds].apply(format_number_vn).astype(str)
+      df_f = df_f[formatted_col_ds.isin(f_ds)]
+
+    df_f = filter_by_thu_multi(df_f, col_thu, f_thu)
+    for col in df_f.columns:
+      if any(
+          x in col.lower().replace(' ', '')
+          for x in ['3msales', 'doanhsố', 'doanhso', 'sales', 'doanhsômtd']
+      ):
+        df_f[col] = pd.to_numeric(df_f[col], errors='coerce').apply(
+            format_number_vn
+        )
+
+    all_cols_mcp = df_f.columns.tolist()
+    saved_mcp_cols = st.query_params.get('mcp_cols', None)
+    if saved_mcp_cols:
+      if isinstance(saved_mcp_cols, str):
+        default_cols_mcp = [
+            c.strip()
+            for c in saved_mcp_cols.split(',')
+            if c.strip() in all_cols_mcp
+        ]
+      else:
+        default_cols_mcp = [c for c in saved_mcp_cols if c in all_cols_mcp]
+      if not default_cols_mcp:
+        default_cols_mcp = all_cols_mcp
+    else:
+      default_cols_mcp = all_cols_mcp
+
+    with st.popover('👁️ Chọn cột hiển thị (MCP)', use_container_width=False):
+      selected_mcp_cols = st.multiselect(
+          'Bỏ chọn để ẩn cột:',
+          all_cols_mcp,
+          default=default_cols_mcp,
+          key='mcp_cols_input',
+      )
+    st.query_params['mcp_cols'] = ','.join(selected_mcp_cols)
+
+    st.dataframe(
+        df_f[selected_mcp_cols], use_container_width=True, height=450, hide_index=True
+    )
+    st.caption(f'Hiển thị: {len(df_f):,} / {len(mcp):,} cửa hàng')
+
+# ----- TAB CAT -----
+with tab_cat:
+  st.markdown(
+      '<h3 style="color: #034ea2; font-weight: 800; margin-bottom: 0px;'
+      ' font-size: 15px;">🎯 TRACKING MBS - THEO NGÀNH HÀNG (CATEGORY)</h3>',
+      unsafe_allow_html=True,
+  )
+  if df_cat.empty:
+    st.error("❌ Không tìm thấy Data_Cat.xlsx trong thư mục 'data'")
+  else:
+    col_nv = find_col(df_cat, ['SM Name', 'SM name', 'Tên NVBH', 'Nhân viên'])
+    col_ma = find_col(df_cat, ['Outlet Code', 'Outlet_code', 'Mã CH', 'Mã khách hàng'])
+    col_ten = find_col(df_cat, ['Outlet Name', 'Outlet_name', 'Tên CH', 'Tên khách hàng'])
+    col_thu = find_col(df_cat, ['Thứ'])
+
+    saved_cat_nv = st.query_params.get('cat_nv', '')
+    default_cat_nv_list = (
+        [x.strip() for x in saved_cat_nv.split(',') if x.strip()]
+        if saved_cat_nv
+        else []
+    )
+
+    saved_cat_thu = st.query_params.get('cat_thu', '')
+    default_cat_thu_list = (
+        [x.strip() for x in saved_cat_thu.split(',') if x.strip()]
+        if saved_cat_thu
+        else []
+    )
+
+    saved_cat_ma = st.query_params.get('cat_ma', '')
+    saved_cat_ten = st.query_params.get('cat_ten', '')
+
+    c1, c2 = st.columns(2)
+    with c1:
+      st.markdown(
+          '<p class="filter-label">👤 Lọc Nhân Viên (ĐDKD - Chọn nhiều)</p>',
+          unsafe_allow_html=True,
+      )
+      nv_opts = (
+          sorted(df_cat[col_nv].dropna().astype(str).unique().tolist())
+          if col_nv
+          else []
+      )
+      valid_cat_nv = [v for v in default_cat_nv_list if v in nv_opts]
+      f_nv = st.multiselect(
+          '',
+          nv_opts,
+          default=valid_cat_nv,
+          key='cat_nv_input',
+          on_change=update_cat_params,
+          label_visibility='collapsed',
+      )
+    with c2:
+      st.markdown(
+          '<p class="filter-label">📅 Lọc Theo Thứ (Chọn nhiều)</p>',
+          unsafe_allow_html=True,
+      )
+      thu_opts = ['2', '3', '4', '5', '6', '7', '25', '36', '47']
+      valid_cat_thu = [t for t in default_cat_thu_list if t in thu_opts]
+      f_thu = st.multiselect(
+          '',
+          thu_opts,
+          default=valid_cat_thu,
+          key='cat_thu_input',
+          on_change=update_cat_params,
+          label_visibility='collapsed',
+      )
+
+    c3, c4 = st.columns(2)
+    with c3:
+      st.markdown(
+          '<p class="filter-label">🆔 Lọc Mã Khách Hàng</p>',
+          unsafe_allow_html=True,
+      )
+      f_ma = st.text_input(
+          '',
+          value=saved_cat_ma,
+          key='cat_ma_input',
+          on_change=update_cat_params,
+          label_visibility='collapsed',
+      )
+    with c4:
+      st.markdown(
+          '<p class="filter-label">🏪 Lọc Tên Khách Hàng</p>',
+          unsafe_allow_html=True,
+      )
+      f_ten = st.text_input(
+          '',
+          value=saved_cat_ten,
+          key='cat_ten_input',
+          on_change=update_cat_params,
+          label_visibility='collapsed',
+      )
+
+    st.query_params['cat_nv'] = (
+        ','.join(st.session_state.cat_nv_input)
+        if st.session_state.cat_nv_input
+        else ''
+    )
+    st.query_params['cat_thu'] = (
+        ','.join(st.session_state.cat_thu_input)
+        if st.session_state.cat_thu_input
+        else ''
+    )
+    st.query_params['cat_ma'] = st.session_state.cat_ma_input
+    st.query_params['cat_ten'] = st.session_state.cat_ten_input
+
+    df_f = df_cat.copy()
+    if f_nv and col_nv:
+      df_f = df_f[df_f[col_nv].astype(str).isin(f_nv)]
+    if f_ma and col_ma:
+      df_f = df_f[
+          df_f[col_ma].astype(str).str.contains(f_ma, case=False, na=False)
+      ]
+    if f_ten and col_ten:
+      df_f = df_f[
+          df_f[col_ten].astype(str).str.contains(f_ten, case=False, na=False)
+      ]
+    df_f = filter_by_thu_multi(df_f, col_thu, f_thu)
+    for col in df_f.columns:
+      if 'doanh số' in col.lower() or 'doanhso' in col.lower().replace(
+          ' ', ''
+      ):
+        df_f[col] = pd.to_numeric(df_f[col], errors='coerce').apply(
+            format_number_vn
+        )
+
+    all_cols_cat = df_f.columns.tolist()
+    saved_cat_cols = st.query_params.get('cat_cols', None)
+    if saved_cat_cols:
+      if isinstance(saved_cat_cols, str):
+        default_cols_cat = [
+            c.strip()
+            for c in saved_cat_cols.split(',')
+            if c.strip() in all_cols_cat
+        ]
+      else:
+        default_cols_cat = [c for c in saved_cat_cols if c in all_cols_cat]
+      if not default_cols_cat:
+        default_cols_cat = all_cols_cat
+    else:
+      default_cols_cat = all_cols_cat
+
+    with st.popover('👁️ Chọn cột hiển thị (Category)', use_container_width=False):
+      selected_cat_cols = st.multiselect(
+          'Bỏ chọn
