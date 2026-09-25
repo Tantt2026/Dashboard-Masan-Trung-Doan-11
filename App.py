@@ -427,6 +427,53 @@ def filter_by_thu_multi(df, col_thu, f_thu_list):
   return df[mask]
 
 
+def filter_by_odd_week(df, report_date):
+  """Lọc cửa hàng theo tuần chẵn/lẻ ISO dựa trên cột ODD_WEEK.
+  - Tuần lẻ (ISO week % 2 == 1): giữ Odd Week + Both
+  - Tuần chẵn (ISO week % 2 == 0): giữ Even Week + Both
+  """
+  if df is None or df.empty or report_date is None:
+    return df
+
+  # Tìm cột ODD_WEEK (nhiều biến thể tên)
+  col = find_col(df, ['ODD_WEEK', 'Odd_Week', 'Odd Week', 'WEEK_TYPE', 'Week Type'])
+  if not col:
+    for c in df.columns:
+      cl = str(c).lower().replace(' ', '').replace('_', '')
+      if 'oddweek' in cl or (cl == 'oddweek') or ('odd' in cl and 'week' in cl):
+        col = c
+        break
+  if not col:
+    return df
+
+  iso_week = int(report_date.isocalendar()[1])
+  is_odd_week = (iso_week % 2 == 1)  # 1,3,5... = Tuần Lẻ
+
+  # Chuẩn hoá giá trị
+  raw = df[col]
+  s = (
+      raw.astype(str)
+      .str.strip()
+      .str.lower()
+      .str.replace('_', ' ', regex=False)
+      .str.replace(r'\s+', ' ', regex=True)
+  )
+
+  both_mask = (
+      s.isin(['both', 'cả hai', 'ca hai', 'all', 'nan', 'none', '', 'nat'])
+      | raw.isna()
+  )
+  odd_mask = s.isin(['odd week', 'odd', 'tuần lẻ', 'tuan le', 'lẻ', 'le'])
+  even_mask = s.isin(['even week', 'even', 'tuần chẵn', 'tuan chan', 'chẵn', 'chan'])
+
+  if is_odd_week:
+    keep = both_mask | odd_mask
+  else:
+    keep = both_mask | even_mask
+
+  return df.loc[keep].copy()
+
+
 def process_mcp_sales(df_rpt, df_mcp):
   if df_mcp.empty or df_rpt.empty:
     return df_mcp
@@ -1007,6 +1054,9 @@ def build_visit_report(
   if f_thu_list:
     c_thu = find_col(mcp_f, ['Thứ', 'Frequency', 'Tần suất'])
     mcp_f = filter_by_thu_multi(mcp_f, c_thu, f_thu_list)
+
+  # Lọc theo tuần chẵn/lẻ ISO (cột ODD_WEEK)
+  mcp_f = filter_by_odd_week(mcp_f, report_date)
 
   c_nv_name = (
       find_col(mcp_f, ['SM Name', 'SM name', 'Tên NVBH', 'Nhân viên'])
@@ -2205,7 +2255,7 @@ st.markdown(
     <div class="logo">{logo_svg}</div>
     <div class="title-block">
         <h1>SƯ ĐOÀN HCM4 - TRUNG ĐOÀN 11</h1>
-        <h2>TRACKING KPI ĐDKD - TEAM SS Nguyễn Thị Tường Vy </h2>
+        <h2>TRACKING KPI ĐDKD - TEAM SS NGUYỄN THỊ TƯỜNG VY </h2>
     </div>
 </div>
 """,
@@ -2501,11 +2551,47 @@ with tab_kpi:
     )
 
   elif selected_kpi == 'VISIT':
+    # ===== TỰ NHẬN THỨ + TUẦN ISO CHẴN/LẺ TỪ NGÀY CHỌN =====
+    iso_year, iso_week, iso_weekday = report_date.isocalendar()
+    week_type = 'Tuần Chẵn' if iso_week % 2 == 0 else 'Tuần Lẻ'
+    wday = report_date.weekday()  # 0=Mon ... 6=Sun
+
+    weekday_map = {
+        0: 'THỨ HAI',
+        1: 'THỨ BA',
+        2: 'THỨ TƯ',
+        3: 'THỨ NĂM',
+        4: 'THỨ SÁU',
+        5: 'THỨ BẢY',
+        6: 'CHỦ NHẬT',
+    }
+    wname = weekday_map.get(wday, '')
+
+    # Map thứ → mã chu kỳ viếng thăm tương ứng
+    # Thứ 2/5 → 2 + 25 | Thứ 3/6 → 3 + 36 | Thứ 4/7 → 4 + 47
+    auto_thu_map = {
+        0: ['2', '25'],   # Thứ 2
+        1: ['3', '36'],   # Thứ 3
+        2: ['4', '47'],   # Thứ 4
+        3: ['5', '25'],   # Thứ 5
+        4: ['6', '36'],   # Thứ 6
+        5: ['7', '47'],   # Thứ 7
+        6: [],            # Chủ nhật
+    }
+    auto_thu = auto_thu_map.get(wday, [])
+
+    # Khi đổi NGÀY → tự reset filter theo thứ của ngày đó
+    date_key = report_date.strftime('%Y-%m-%d')
+    if st.session_state.get('visit_last_date') != date_key:
+      st.session_state['visit_last_date'] = date_key
+      st.session_state['visit_thu_input'] = auto_thu
+      st.query_params['visit_thu'] = ','.join(auto_thu)
+
     saved_visit_thu = st.query_params.get('visit_thu', '')
     default_visit_thu_list = (
         [x.strip() for x in saved_visit_thu.split(',') if x.strip()]
         if saved_visit_thu
-        else []
+        else auto_thu
     )
 
     def update_visit_params():
@@ -2515,23 +2601,21 @@ with tab_kpi:
           else ''
       )
 
-    col_f_thu_v, _ = st.columns([1, 1.5])
-    with col_f_thu_v:
-      st.markdown(
-          '<p class="filter-label">📅 Lọc Theo Thứ / Chu kỳ Viếng Thăm (Chọn'
-          ' nhiều)</p>',
-          unsafe_allow_html=True,
-      )
-      thu_opts = ['2', '3', '4', '5', '6', '7', '25', '36', '47']
-      valid_visit_thu = [t for t in default_visit_thu_list if t in thu_opts]
-      f_thu_visit = st.multiselect(
-          '',
-          thu_opts,
-          default=valid_visit_thu,
-          key='visit_thu_input',
-          on_change=update_visit_params,
-          label_visibility='collapsed',
-      )
+    st.markdown(
+        '<p class="filter-label">📅 Lọc Theo Thứ / Chu kỳ Viếng Thăm (Chọn'
+        ' nhiều)</p>',
+        unsafe_allow_html=True,
+    )
+    thu_opts = ['2', '3', '4', '5', '6', '7', '25', '36', '47']
+    valid_visit_thu = [t for t in default_visit_thu_list if t in thu_opts]
+    f_thu_visit = st.multiselect(
+        '',
+        thu_opts,
+        default=valid_visit_thu,
+        key='visit_thu_input',
+        on_change=update_visit_params,
+        label_visibility='collapsed',
+    )
 
     st.query_params['visit_thu'] = (
         ','.join(st.session_state.visit_thu_input)
@@ -2554,28 +2638,17 @@ with tab_kpi:
         title_v,
     ) = build_visit_report(mcp, df, report_date, filter_nv, f_thu_visit)
 
-    weekday_map = {
-        0: 'THỨ HAI',
-        1: 'THỨ BA',
-        2: 'THỨ TƯ',
-        3: 'THỨ NĂM',
-        4: 'THỨ SÁU',
-        5: 'THỨ BẢY',
-        6: 'CHỦ NHẬT',
-    }
-    wname = weekday_map.get(report_date.weekday(), '')
-
     st.markdown(
         f'<h3 style="color: #034ea2; font-weight: 800; margin-bottom: 2px;'
         f' font-size: 16px; text-align: center;">BÁO CÁO LỊCH VIẾNG THĂM & % ACTIVE'
-        f' {wname} - {report_date.strftime("%d/%m/%Y")}</h3>',
+        f' {wname} ({week_type} - Tuần {iso_week}) - {report_date.strftime("%d/%m/%Y")}</h3>',
         unsafe_allow_html=True,
     )
     st.markdown(
         f'<p style="text-align: center; font-size: 12px; color: #4a5568;'
         f' margin-bottom: 12px;">Dữ liệu cập nhật {wname} ngày'
-        f' {report_date.strftime("%d/%m/%Y")} | Kèm tỷ lệ % Active (Đã mua / Tổng'
-        ' KH)</p>',
+        f' {report_date.strftime("%d/%m/%Y")} | {week_type} (ISO tuần {iso_week}/{iso_year})'
+        f' | Kèm tỷ lệ % Active (Đã mua / Tổng KH)</p>',
         unsafe_allow_html=True,
     )
 
@@ -2601,7 +2674,7 @@ with tab_kpi:
     st.markdown(
         f"""
         <div class="note-box">
-            <div style="font-weight: 800; color: #034ea2; margin-bottom: 8px; font-size: 13.5px;">NHẬN XÉT & ĐÁNH GIÁ LỊCH VIẾNG THĂM {wname}:</div>
+            <div style="font-weight: 800; color: #034ea2; margin-bottom: 8px; font-size: 13.5px;">NHẬN XÉT & ĐÁNH GIÁ LỊCH VIẾNG THĂM {wname} ({week_type} - Tuần {iso_week}):</div>
             <ul style="margin: 0; padding-left: 18px; line-height: 1.6;">
                 <li><b>Kết Quả Thực Hiện:</b> Theo dõi sát sao tỷ lệ mua hàng thực tế (Active) so với lịch tuyến viếng thăm trong ngày {report_date.strftime('%d/%m/%Y')}.</li>
                 <li><b>Trọng Tâm Vận Hành:</b> Ưu tiên bám sát các nhóm cửa hàng VIP và Kênh ON Premise để đảm bảo đạt chuẩn bao phủ và tối ưu sản lượng.</li>
