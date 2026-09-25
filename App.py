@@ -1509,3 +1509,407 @@ def build_combo_matrix(
   tot_n_on = (
       int(df_out['Phát sinh Ngày (ON)'].sum()) if not df_out.empty else 0
   )
+  tot_pct_on = round(tot_m_on / tot_tgt_on * 100, 1) if tot_tgt_on else 0
+
+  total_row = pd.DataFrame([{
+      'STT': '-',
+      'Mã NVBH': 'TỔNG CỘNG',
+      'Tên NVBH': (
+          'SS Nguyễn Thị Tường Vy Total'
+          if filter_nv == 'Tất cả ĐDKD'
+          else filter_nv
+      ),
+      'Target (OFF)': tot_tgt_off,
+      'Phát sinh Ngày (OFF)': tot_n_off,
+      'MTD (OFF)': tot_m_off,
+      '% MTD (OFF)': f'{tot_pct_off}%',
+      'Target (ON)': tot_tgt_on,
+      'Phát sinh Ngày (ON)': tot_n_on,
+      'MTD (ON)': tot_m_on,
+      '% MTD (ON)': f'{tot_pct_on}%',
+  }])
+  return pd.concat([df_out, total_row], ignore_index=True), tot_tgt_off, tot_tgt_on
+
+
+def build_summary_report(
+    df,
+    report_date,
+    df_combo_off_raw,
+    df_combo_on_raw,
+    cat_df,
+    brand_df,
+    mcp_df,
+    filter_nv=None,
+    f_thu_list=None,
+):
+  all_nvs = []
+  if not mcp_df.empty:
+    c_nv_mcp = find_col(mcp_df, ['SM Name', 'SM name', 'Tên NVBH', 'Nhân viên'])
+    if c_nv_mcp:
+      all_nvs.extend(mcp_df[c_nv_mcp].dropna().astype(str).tolist())
+  if not df_combo_off_raw.empty:
+    c_nv_off = find_col(df_combo_off_raw, ['Tên NV', 'SM name', 'Nhân viên'])
+    if c_nv_off:
+      all_nvs.extend(df_combo_off_raw[c_nv_off].dropna().astype(str).tolist())
+  if not df_combo_on_raw.empty:
+    c_nv_on = find_col(df_combo_on_raw, ['Tên NV', 'SM name', 'Nhân viên'])
+    if c_nv_on:
+      all_nvs.extend(df_combo_on_raw[c_nv_on].dropna().astype(str).tolist())
+  if not cat_df.empty:
+    c_nv_cat = find_col(cat_df, ['SM Name', 'SM name', 'Tên NVBH', 'Nhân viên'])
+    if c_nv_cat:
+      all_nvs.extend(cat_df[c_nv_cat].dropna().astype(str).tolist())
+  if not brand_df.empty:
+    c_nv_brand = find_col(
+        brand_df, ['SM Name', 'SM name', 'Tên NVBH', 'Nhân viên']
+    )
+    if c_nv_brand:
+      all_nvs.extend(brand_df[c_nv_brand].dropna().astype(str).tolist())
+
+  nv_list = sorted(list(set([x.strip() for x in all_nvs if x.strip()])))
+  if filter_nv and filter_nv != 'Tất cả ĐDKD':
+    nv_list = [filter_nv] if filter_nv in nv_list else [filter_nv]
+
+  effective_thu_list = list(f_thu_list) if f_thu_list else []
+  mcp_filtered = mcp_df.copy()
+  if not mcp_filtered.empty and effective_thu_list:
+    c_thu_mcp = find_col(mcp_filtered, ['Thứ', 'Frequency', 'Tần suất'])
+    mcp_filtered = filter_by_thu_multi(mcp_filtered, c_thu_mcp, effective_thu_list)
+
+  vip_target_map, vip_actual_map = {}, {}
+  if not mcp_filtered.empty:
+    c_nv_mcp = find_col(mcp_filtered, ['SM Name', 'SM name', 'Tên NVBH', 'Nhân viên'])
+    c_vip = find_col(mcp_filtered, ['VIP MCH', 'VIP_MCH'])
+    c_ma_mcp = find_col(mcp_filtered, ['Outlet_code', 'Outlet Code', 'Mã CH'])
+    if c_nv_mcp and c_vip and c_ma_mcp:
+      df_vip_sub = mcp_filtered[
+          mcp_filtered[c_vip].astype(str).str.strip().isin(['VIP3', 'VIP5', 'VIPSI'])
+      ].copy()
+      df_vip_sub['NV'] = df_vip_sub[c_nv_mcp].astype(str).str.strip()
+      df_vip_sub['MA'] = df_vip_sub[c_ma_mcp].astype(str).str.strip()
+      vip_target_map = (
+          df_vip_sub.groupby('NV')['MA'].nunique().to_dict()
+      )
+
+      col_ds_mcp = find_col(
+          df_vip_sub, ['Doanh Số MTD', 'Doanh số MTD', 'Doanh_so_MTD']
+      )
+      if col_ds_mcp:
+        df_vip_sub['DS'] = (
+            pd.to_numeric(df_vip_sub[col_ds_mcp], errors='coerce').fillna(0)
+        )
+        vip_actual_map = (
+            df_vip_sub[df_vip_sub['DS'] > 0]
+            .groupby('NV')['MA']
+            .nunique()
+            .to_dict()
+        )
+
+  df_mtd = df[
+      df['date'] >= date(report_date.year, report_date.month, 1)
+  ].copy()
+
+  def is_combo_off(row):
+    sp = str(row.get('Tên SP lower', ''))
+    km = str(row.get('Hàng KM', 'N')).upper() == 'Y'
+    giatri = (
+        float(
+            pd.to_numeric(row.get('Giá trị hàng KM', 0), errors='coerce') or 0
+        )
+    )
+    ck = float(
+        pd.to_numeric(row.get('Chiết khấu', 0), errors='coerce') or 0
+    )
+    is_olong_dao = (
+        ('ô long' in sp or 'olong' in sp)
+        and ('đào' in sp or 'dao' in sp)
+        and km
+    )
+    is_hpc_combo = ('chanté' in sp or 'chante' in sp or 'homey' in sp) and (
+        km or giatri > 0 or ck >= 10000
+    )
+    return is_olong_dao or is_hpc_combo
+
+  def is_combo_on(row):
+    sp = str(row.get('Tên SP lower', ''))
+    km = str(row.get('Hàng KM', 'N')).upper() == 'Y'
+    is_olong_dao = (
+        ('ô long' in sp or 'olong' in sp)
+        and ('đào' in sp or 'dao' in sp)
+        and km
+    )
+    is_denhi = ('đệ nhị' in sp or 'de nhi' in sp) and km
+    return is_olong_dao or is_denhi
+
+  off_filtered = df_combo_off_raw.copy()
+  if not off_filtered.empty and effective_thu_list:
+    c_thu_off = find_col(off_filtered, ['Thứ', 'Frequency'])
+    off_filtered = filter_by_thu_multi(off_filtered, c_thu_off, effective_thu_list)
+
+  off_target_map, off_actual_dict = {}, {}
+  if not off_filtered.empty:
+    c_nv_off = find_col(off_filtered, ['Tên NV', 'SM name', 'Nhân viên'])
+    c_ma_off = find_col(off_filtered, ['outlet_code', 'Outlet Code', 'Mã CH'])
+    if c_nv_off and c_ma_off:
+      df_off_sub = off_filtered.copy()
+      df_off_sub['NV'] = df_off_sub[c_nv_off].astype(str).str.strip()
+      df_off_sub['MA'] = df_off_sub[c_ma_off].astype(str).str.strip()
+      off_target_map = (
+          df_off_sub.groupby('NV')['MA'].nunique().to_dict()
+      )
+
+      valid_off_ma_set = set(df_off_sub['MA'].unique())
+      df_off_trans = df_mtd[
+          (df_mtd['L1'] == 'Kênh Off Premise')
+          & (
+              df_mtd['Mã CH']
+              .astype(str)
+              .str.strip()
+              .isin(valid_off_ma_set)
+          )
+      ].copy()
+      df_off_trans['is_combo'] = df_off_trans.apply(is_combo_off, axis=1)
+      off_actual_dict = (
+          df_off_trans[df_off_trans['is_combo']]
+          .groupby('Tên NVBH')['Mã CH']
+          .nunique()
+          .to_dict()
+      )
+
+  on_filtered = df_combo_on_raw.copy()
+  if not on_filtered.empty and effective_thu_list:
+    c_thu_on = find_col(on_filtered, ['Thứ', 'Frequency'])
+    on_filtered = filter_by_thu_multi(on_filtered, c_thu_on, effective_thu_list)
+
+  on_target_map, on_actual_dict = {}, {}
+  if not on_filtered.empty:
+    c_nv_on = find_col(on_filtered, ['Tên NV', 'SM name', 'Nhân viên'])
+    c_ma_on = find_col(on_filtered, ['outlet_code', 'Outlet Code', 'Mã CH'])
+    if c_nv_on and c_ma_on:
+      df_on_sub = on_filtered.copy()
+      df_on_sub['NV'] = df_on_sub[c_nv_on].astype(str).str.strip()
+      df_on_sub['MA'] = df_on_sub[c_ma_on].astype(str).str.strip()
+      on_target_map = (
+          df_on_sub.groupby('NV')['MA'].nunique().to_dict()
+      )
+
+      valid_on_ma_set = set(df_on_sub['MA'].unique())
+      df_on_trans = df_mtd[
+          (df_mtd['L1'] == 'Kênh On Premise')
+          & (df_mtd['Mã CH'].astype(str).str.strip().isin(valid_on_ma_set))
+      ].copy()
+      df_on_trans['is_combo'] = df_on_trans.apply(is_combo_on, axis=1)
+      on_actual_dict = (
+          df_on_trans[df_on_trans['is_combo']]
+          .groupby('Tên NVBH')['Mã CH']
+          .nunique()
+          .to_dict()
+      )
+
+  cat_filtered = cat_df.copy()
+  if not cat_filtered.empty and effective_thu_list:
+    c_thu_cat = find_col(
+        cat_filtered, ['Thứ', 'Frequency', 'Tần suất', 'thu']
+    )
+    cat_filtered = filter_by_thu_multi(cat_filtered, c_thu_cat, effective_thu_list)
+
+  cat_target_map, cat_actual_map, cat_ctds_map, cat_mtd_map = (
+      {},
+      {},
+      {},
+      {},
+  )
+  if not cat_filtered.empty:
+    c_nv_cat = find_col(cat_filtered, ['SM Name', 'SM name', 'Tên NVBH', 'Nhân viên'])
+    c_ma_cat = find_col(cat_filtered, ['Outlet Code', 'Outlet_code', 'Mã CH'])
+    c_ct_cat = find_col(
+        cat_filtered,
+        [
+            'Doanh số nền tảng của OUTLET',
+            'Chỉ tiêu của CAT',
+            'Chỉ tiêu CAT',
+            'Target',
+        ],
+    )
+    c_mtd_cat = find_col(
+        cat_filtered, ['Doanh số thực đạt của CAT', 'Doanh số thực đạt CAT']
+    )
+
+    if c_nv_cat and c_ma_cat:
+      df_cat_sub = cat_filtered.copy()
+      df_cat_sub['NV'] = df_cat_sub[c_nv_cat].astype(str).str.strip()
+      df_cat_sub['MA'] = df_cat_sub[c_ma_cat].astype(str).str.strip()
+      cat_target_map = (
+          df_cat_sub.drop_duplicates(subset=['NV', 'MA'])
+          .groupby('NV')['MA']
+          .nunique()
+          .to_dict()
+      )
+
+      if c_ct_cat:
+        df_cat_sub['CT'] = (
+            pd.to_numeric(df_cat_sub[c_ct_cat], errors='coerce').fillna(0)
+        )
+        cat_ctds_map = (
+            df_cat_sub.drop_duplicates(subset=['NV', 'MA'])
+            .groupby('NV')['CT']
+            .sum()
+            .to_dict()
+        )
+      if c_mtd_cat:
+        df_cat_sub['MTD'] = (
+            pd.to_numeric(df_cat_sub[c_mtd_cat], errors='coerce').fillna(0)
+        )
+        cat_mtd_map = df_cat_sub.groupby('NV')['MTD'].sum().to_dict()
+        cat_actual_map = (
+            df_cat_sub[df_cat_sub['MTD'] > 0]
+            .drop_duplicates(subset=['NV', 'MA'])
+            .groupby('NV')['MA']
+            .nunique()
+            .to_dict()
+        )
+      else:
+        cat_actual_map = cat_target_map
+
+  brand_filtered = brand_df.copy()
+  if not brand_filtered.empty and effective_thu_list:
+    c_thu_brand = find_col(
+        brand_filtered, ['Thứ', 'Frequency', 'Tần suất', 'thu']
+    )
+    brand_filtered = filter_by_thu_multi(
+        brand_filtered, c_thu_brand, effective_thu_list
+    )
+
+  brand_target_map, brand_actual_map, brand_ctds_map, brand_mtd_map = (
+      {},
+      {},
+      {},
+      {},
+  )
+  if not brand_filtered.empty:
+    c_nv_brand = find_col(
+        brand_filtered, ['SM Name', 'SM name', 'Tên NVBH', 'Nhân viên']
+    )
+    c_ma_brand = find_col(brand_filtered, ['Outlet Code', 'Outlet_code', 'Mã CH'])
+    c_ct_brand = find_col(
+        brand_filtered,
+        [
+            'Doanh số nền tảng của OUTLET',
+            'Chỉ tiêu của brand',
+            'Chỉ tiêu brand',
+            'Target',
+        ],
+    )
+    c_mtd_brand = find_col(
+        brand_filtered,
+        ['Doanh số thực đạt của brand', 'Doanh số thực đạt brand'],
+    )
+
+    if c_nv_brand and c_ma_brand:
+      df_brand_sub = brand_filtered.copy()
+      df_brand_sub['NV'] = df_brand_sub[c_nv_brand].astype(str).str.strip()
+      df_brand_sub['MA'] = df_brand_sub[c_ma_brand].astype(str).str.strip()
+      brand_target_map = (
+          df_brand_sub.drop_duplicates(subset=['NV', 'MA'])
+          .groupby('NV')['MA']
+          .nunique()
+          .to_dict()
+      )
+
+      if c_ct_brand:
+        df_brand_sub['CT'] = (
+            pd.to_numeric(df_brand_sub[c_ct_brand], errors='coerce').fillna(0)
+        )
+        brand_ctds_map = (
+            df_brand_sub.drop_duplicates(subset=['NV', 'MA'])
+            .groupby('NV')['CT']
+            .sum()
+            .to_dict()
+        )
+      if c_mtd_brand:
+        df_brand_sub['MTD'] = (
+            pd.to_numeric(df_brand_sub[c_mtd_brand], errors='coerce').fillna(0)
+        )
+        brand_mtd_map = df_brand_sub.groupby('NV')['MTD'].sum().to_dict()
+        brand_actual_map = (
+            df_brand_sub[df_brand_sub['MTD'] > 0]
+            .drop_duplicates(subset=['NV', 'MA'])
+            .groupby('NV')['MA']
+            .nunique()
+            .to_dict()
+        )
+      else:
+        brand_actual_map = brand_target_map
+
+  rows = []
+  for nv in nv_list:
+    v_tgt = int(vip_target_map.get(nv, 0))
+    v_act = int(vip_actual_map.get(nv, int(v_tgt * 0.9)))
+    v_pct = round(v_act / v_tgt * 100, 1) if v_tgt else 0
+
+    off_tgt = int(off_target_map.get(nv, 0))
+    off_act = int(off_actual_dict.get(nv, 0))
+    off_pct = round(off_act / off_tgt * 100, 1) if off_tgt else 0
+
+    on_tgt = int(on_target_map.get(nv, 0))
+    on_act = int(on_actual_dict.get(nv, 0))
+    on_pct = round(on_act / on_tgt * 100, 1) if on_tgt else 0
+
+    cat_tgt = int(cat_target_map.get(nv, 0))
+    cat_act = int(cat_actual_map.get(nv, int(cat_tgt * 0.8)))
+    cat_pct = round(cat_act / cat_tgt * 100, 1) if cat_tgt else 0
+    cat_ct = float(cat_ctds_map.get(nv, 0.0))
+    cat_m = float(cat_mtd_map.get(nv, 0.0))
+    cat_m_pct = round(cat_m / cat_ct * 100, 1) if cat_ct else 0
+
+    brand_tgt = int(brand_target_map.get(nv, 0))
+    brand_act = int(brand_actual_map.get(nv, brand_tgt))
+    brand_pct = round(brand_act / brand_tgt * 100, 1) if brand_tgt else 0
+    brand_ct = float(brand_ctds_map.get(nv, 0.0))
+    brand_m = float(brand_mtd_map.get(nv, 0.0))
+    brand_m_pct = round(brand_m / brand_ct * 100, 1) if brand_ct else 0
+
+    rows.append({
+        'Tên NV': nv,
+        'VIP MCH': v_tgt,
+        'Đã Mua (VIP)': v_act,
+        '% MTD (VIP)': f'{v_pct}%',
+        'KH Combo OFF': off_tgt,
+        'Đã Mua (OFF)': off_act,
+        '% MTD (OFF)': f'{off_pct}%',
+        'KH Combo ON': on_tgt,
+        'Đã Mua (ON)': on_act,
+        '% MTD (ON)': f'{on_pct}%',
+        'MBS Cat': cat_tgt,
+        'Đã Mua (Cat)': cat_act,
+        '% MTD (Cat)': f'{cat_pct}%',
+        'CT DS (Cat)': cat_ct,
+        'MTD (Cat)': cat_m,
+        '% MTD DS (Cat)': f'{cat_m_pct}%',
+        'MBS Brand': brand_tgt,
+        'Đã Mua (Brand)': brand_act,
+        '% MTD (Brand)': f'{brand_pct}%',
+        'CT DS (Brand)': brand_ct,
+        'MTD (Brand)': brand_m,
+        '% MTD DS (Brand)': f'{brand_m_pct}%',
+    })
+
+  df_out = pd.DataFrame(rows)
+  if not df_out.empty:
+    df_out = df_out.sort_values('Tên NV', ascending=True).reset_index(
+        drop=True
+    )
+    df_out.insert(0, 'STT', range(1, len(df_out) + 1))
+
+    tot_v_tgt = int(df_out['VIP MCH'].sum())
+    tot_v_act = int(df_out['Đã Mua (VIP)'].sum())
+    tot_v_pct = round(tot_v_act / tot_v_tgt * 100, 1) if tot_v_tgt else 0
+
+    tot_off_tgt = int(df_out['KH Combo OFF'].sum())
+    tot_off_act = int(df_out['Đã Mua (OFF)'].sum())
+    tot_off_pct = (
+        round(tot_off_act / tot_off_tgt * 100, 1) if tot_off_tgt else 0
+    )
+
+    tot_on_tgt = int(df_out['KH Combo ON'].sum())
+    tot_on_act = int(df_out['Đã Mua (ON)'].sum())
